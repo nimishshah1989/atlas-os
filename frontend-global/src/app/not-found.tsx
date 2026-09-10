@@ -12,7 +12,7 @@ export default function NotFound() {
           ETFs
         </Link>
         ,{' '}
-        <Link href="/stocks" className="text-accent">
+        <Link href="/sp500" className="text-accent">
           Stocks
         </Link>{' '}
         and{' '}

@@ -136,6 +136,7 @@ function RsCell({ value }: { value: string | null }) {
 /** Where a node's own page lives — the sector board and the instrument board are one product, so
  *  every name on it is a door. */
 function hrefOf(node: SectorNode): string | null {
+  if (node.level === 'sector') return `/sectors/${encodeURIComponent(node.id)}`
   if (node.level === 'theme') return `/themes/${encodeURIComponent(node.id)}`
   if (node.level === 'fund' && node.symbol) return `/etfs/${encodeURIComponent(node.symbol)}`
   return null
@@ -255,7 +256,18 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: 'name', label: 'Name' },
 ]
 
-export function SectorHeatmap({ tree }: { tree: SectorTree }) {
+export function SectorHeatmap({
+  tree,
+  heading = 'Sector · theme · fund',
+  emptyNote,
+}: {
+  tree: SectorTree
+  /** What the first column is called. A sector's own page hands this component its THEMES as the
+   *  top level, so the header has to say so — the columns are identical either way, which is the
+   *  whole reason one component draws both. */
+  heading?: string
+  emptyNote?: string
+}) {
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'composite', dir: -1 })
 
@@ -265,9 +277,14 @@ export function SectorHeatmap({ tree }: { tree: SectorTree }) {
   useEffect(() => {
     const id = decodeURIComponent(window.location.hash.replace(/^#/, ''))
     if (!id) return
-    setOpen(new Set([`sector:${id}`]))
+    setOpen(new Set([`sector:${id}`]))  // a hash only ever names a sector
     document.getElementById(id)?.scrollIntoView({ block: 'center' })
   }, [])
+
+  /** A row's key in the open set. Derived from the row, never written down: this component is
+   *  handed sectors on /sectors and THEMES on a sector's own page, so a literal 'sector:' prefix
+   *  is silently wrong on one of them — which is exactly how "Expand all" came to do nothing. */
+  const keyOf = (n: SectorNode) => `${n.level}:${n.id}`
 
   const toggle = (key: string) =>
     setOpen((prev) => {
@@ -280,15 +297,15 @@ export function SectorHeatmap({ tree }: { tree: SectorTree }) {
   const span = useMemo(() => scoreSpan(rows), [rows])
 
   const allOpen = open.size > 0
-  const expandAll = () =>
-    setOpen(allOpen ? new Set() : new Set(tree.rows.map((r) => `sector:${r.id}`)))
+  const expandAll = () => setOpen(allOpen ? new Set() : new Set(rows.map(keyOf)))
 
   if (tree.rows.length === 0) {
     return (
       <p className="panel px-4 py-6 text-[13px] text-ink-2">
-        No fund carries a theme yet. `classify_etfs.py` writes them and `seed_taxonomy.py` seeds
-        the categories they point at — until both have run against this schema, this board has
-        nothing real to rank.
+        {emptyNote ??
+          'No fund carries a theme yet. classify_etfs.py writes them and seed_taxonomy.py seeds the ' +
+            'categories they point at — until both have run against this schema, this board has ' +
+            'nothing real to rank.'}
       </p>
     )
   }
@@ -328,7 +345,7 @@ export function SectorHeatmap({ tree }: { tree: SectorTree }) {
         <table className="w-full min-w-[940px] border-collapse">
           <thead>
             <tr className="bg-raised">
-              <th style={{ ...L, paddingLeft: 8 }}>Sector · theme · fund</th>
+              <th style={{ ...L, paddingLeft: 8 }}>{heading}</th>
               <th style={R}>
                 Scored{' '}
                 <InfoTip title="Scored of classified">
@@ -369,7 +386,7 @@ export function SectorHeatmap({ tree }: { tree: SectorTree }) {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <Row key={`sector:${r.id}`} node={r} open={open} toggle={toggle} span={span} />
+              <Row key={keyOf(r)} node={r} open={open} toggle={toggle} span={span} />
             ))}
           </tbody>
         </table>

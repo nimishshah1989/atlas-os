@@ -18,7 +18,7 @@ import { Chip } from '@/components/ui/Chip'
 import { DecileChip, LeaderMark } from '@/components/ui/DecileChip'
 import { DecileMeter } from '@/components/ui/DecileMeter'
 import { LensBar } from '@/components/ui/LensBar'
-import type { AssetClass, InstrumentRow } from '@/lib/facts'
+import { instrumentPath, type AssetClass, type InstrumentRow } from '@/lib/facts'
 import { formatDecimal, formatPct, formatUsd, formatUsdCompact } from '@/lib/format'
 import {
   lensesLabel,
@@ -44,7 +44,7 @@ const symbol = (assetClass: AssetClass): Column<InstrumentRow> => ({
   width: 72,
   sortValue: (r) => r.symbol,
   render: (r) => (
-    <Link href={`/${assetClass}s/${encodeURIComponent(r.symbol)}`} className="dt-symbol">
+    <Link href={instrumentPath(assetClass, r.symbol)} className="dt-symbol">
       {r.symbol}
     </Link>
   ),

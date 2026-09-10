@@ -116,3 +116,51 @@ export function scoreSpan(rows: readonly SectorNode[]): { best: number; worst: n
   if (v.length === 0) return null
   return { best: Math.max(...v), worst: Math.min(...v) }
 }
+
+// ── one sector's own page ───────────────────────────────────────────────────
+
+/** An S&P 500 company inside the sector, ranked against the sector's other members.
+ *
+ *  THE SECTOR IS THE COMPANY'S OWN GICS SECTOR, from `instrument_master.sector_gics`, which
+ *  ingest_index_membership.py writes from the Select Sector SPDR holdings — official, daily, and
+ *  the same eleven names the taxonomy's level 1 carries. So a sector's stocks and its funds are
+ *  filed under one label by construction rather than by a mapping somebody maintains. */
+export type SectorStock = {
+  symbol: string
+  name: string | null
+  /** 1 = the strongest scored company IN THIS SECTOR. Null where the company is not scored. */
+  rank: number | null
+  n_ranked: number
+  composite: string | null
+  /** Cut in the company's own cap cohort, not in this sector — the decile the board already
+   *  computes for it, carried here rather than re-cut over a different population. */
+  decile: number | null
+  rs_3m_spy: string | null
+  rs_12m_spy: string | null
+  above_ema_200: boolean | null
+  adv_usd: string | null
+}
+
+/** One session of the sector's own history. */
+export type SectorPoint = {
+  date: string
+  /** MEDIAN cumulative total return of the sector's funds since the window opened, as a growth
+   *  factor rebased to 100. Median, not mean, for the same reason every roll-up here is. */
+  index: number
+  /** SPY over the same sessions, rebased to the same 100 — the baseline the line is read against. */
+  spy: number | null
+}
+
+export type SectorDetail = {
+  node: SectorNode
+  /** Where this sector stands among the eleven, carried from the same ranking /sectors shows. */
+  rank: number | null
+  n_ranked: number
+  date: string | null
+  stocks: SectorStock[]
+  history: SectorPoint[]
+  /** How many funds the history is measured over, and from when. Printed, never implied: an index
+   *  over funds that existed for the whole window is a survivorship claim and must say so. */
+  history_members: number
+  history_from: string | null
+}

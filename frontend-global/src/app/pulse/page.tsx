@@ -72,8 +72,8 @@ export default async function PulsePage() {
         {themes.ok ? (
           <RankStrip
             title="Themes"
-            note="Median score of the funds carrying the theme, and how many of them there are."
-            href="/themes"
+            note="Median score of the funds carrying the theme. Themes live inside their sector."
+            href="/sectors"
             items={themeItems(themes.value.rows)}
           />
         ) : (
@@ -95,7 +95,7 @@ export default async function PulsePage() {
         {/* The list ships PACKED (keys + cells) so Next's 2 MB data-cache ceiling is not hit;
             expandRows is the only way back to rows, and it is the same call /etfs makes. */}
         {etfs.ok && <LeaderRail title="Funds" href="/etfs" assetClass="etf" rows={expandRows(etfs.value)} />}
-        {stocks.ok && <LeaderRail title="S&P 500" href="/stocks" assetClass="stock" rows={expandRows(stocks.value)} />}
+        {stocks.ok && <LeaderRail title="S&P 500" href="/sp500" assetClass="stock" rows={expandRows(stocks.value)} />}
       </div>
 
       <div className="mt-3">

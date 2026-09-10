@@ -26,11 +26,19 @@
 import 'server-only'
 import { eodCached } from '@/lib/cache'
 import { db, dbAvailable } from '@/lib/db'
-import type { SectorLevel, SectorNode, SectorTree, SectorWindow } from '@/lib/sectors'
+import type {
+  SectorDetail,
+  SectorLevel,
+  SectorNode,
+  SectorPoint,
+  SectorStock,
+  SectorTree,
+  SectorWindow,
+} from '@/lib/sectors'
 import { SECTOR_WINDOWS } from '@/lib/sectors'
 import { MEMBERS } from '@/lib/queries/themes'
 
-export type { SectorLevel, SectorNode, SectorTree, SectorWindow }
+export type { SectorDetail, SectorLevel, SectorNode, SectorPoint, SectorStock, SectorTree, SectorWindow }
 export { SECTOR_WINDOWS }
 
 const EMPTY: SectorTree = { date: null, rows: [], n_unthemed: 0 }
@@ -207,4 +215,172 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
 export async function getSectorTree(): Promise<SectorTree> {
   if (!dbAvailable) return EMPTY
   return treeInner()
+}
+
+// ── one sector's own page ───────────────────────────────────────────────────
+
+/** How far back the sector's own line is drawn, in SESSIONS not calendar days — the same window
+ *  rule queries/series.ts states: a LIMIT over trading days gives every instrument the same
+ *  number of observations whoever was closed for a holiday. Three years is the shortest window in
+ *  which a sector rotation is visible at all and the longest that stays one cheap query. */
+const HISTORY_SESSIONS = 756
+
+type StockDbRow = {
+  symbol: string
+  name: string | null
+  rank: number | null
+  n_ranked: number
+  composite: string | null
+  decile: number | null
+  rs_3m_spy: string | null
+  rs_12m_spy: string | null
+  above_ema_200: boolean | null
+  adv_usd: string | null
+}
+
+type PointDbRow = { date: string; index: string | null; spy: string | null }
+
+const detailInner = eodCached(async (id: string): Promise<SectorDetail | null> => {
+  const tree = await treeInner()
+  const node = tree.rows.find((r) => r.id === id)
+  if (!node) return null
+
+  // THE TWO RANKINGS ARE CUT OVER TWO POPULATIONS, IN THAT ORDER, AND THE ORDER IS THE POINT.
+  //
+  // The DECILE is cut first, over the WHOLE scored index inside each cap cohort — the same cut
+  // queries/scores.ts makes for /sp500, so a company shows the same decile on both pages. Cutting
+  // it after the sector filter would rank Energy's mega-caps against Energy's mega-caps and call
+  // the result "decile 9", which is a different sentence wearing the same word.
+  //
+  // The RANK is cut second, after the filter, because "which name in Energy" is a question about
+  // Energy. Two numbers, two populations, and neither is allowed to be mistaken for the other.
+  const stocks = await db()<StockDbRow[]>`
+    WITH anchor AS (
+      SELECT max(date) AS d FROM atlas_global.lens_scores_daily WHERE asset_class = 'stock'
+    ),
+    universe AS (
+      SELECT instrument_id FROM atlas_global.universe_snapshot
+      WHERE date = (SELECT max(date) FROM atlas_global.universe_snapshot) AND in_universe
+    ),
+    scored AS (
+      SELECT im.instrument_id, im.symbol, im.name, im.sector_gics,
+             s.composite,
+             CASE WHEN s.composite IS NULL THEN NULL ELSE
+               ntile(10) OVER (PARTITION BY s.cap_cohort, (s.composite IS NULL) ORDER BY s.composite)
+             END AS decile
+      FROM atlas_global.instrument_master im
+      CROSS JOIN anchor a
+      JOIN universe u ON u.instrument_id = im.instrument_id
+      LEFT JOIN atlas_global.lens_scores_daily s
+             ON s.instrument_id = im.instrument_id AND s.date = a.d AND s.asset_class = 'stock'
+      WHERE im.is_active AND im.asset_class = 'stock'
+    ),
+    mine AS (
+      SELECT sc.*
+      FROM scored sc
+      JOIN atlas_global.taxonomy_sector tx
+        ON tx.level = 1 AND tx.is_active AND lower(tx.name) = lower(sc.sector_gics)
+      WHERE tx.id = ${id}
+    )
+    SELECT m.symbol, m.name,
+           RANK() OVER (ORDER BY m.composite DESC NULLS LAST)          AS rank,
+           count(m.composite) OVER ()                                  AS n_ranked,
+           m.composite::text AS composite,
+           m.decile,
+           t.rs_3m_spy::text AS rs_3m_spy, t.rs_12m_spy::text AS rs_12m_spy,
+           t.above_ema_200, t.adv_usd_60d_median::text AS adv_usd
+    FROM mine m
+    CROSS JOIN anchor a
+    LEFT JOIN atlas_global.technical_daily t
+           ON t.instrument_id = m.instrument_id AND t.date = a.d
+    ORDER BY m.composite DESC NULLS LAST, t.adv_usd_60d_median DESC NULLS LAST
+  `
+
+  // The sector's own line. Each member fund is rebased to its OWN close on the window's first
+  // session, and the sector is the MEDIAN of those growth factors — never a mean, never
+  // AUM-weighted, for the same reason every roll-up on this board is a median.
+  //
+  // MEMBERSHIP IS FIXED AT THE WINDOW'S START, which is a survivorship claim and is printed as
+  // one: a fund listed since is not in this line, and one that closed is not either. The honest
+  // alternative — a chained index over changing membership — is a producer's job, not a page's,
+  // and inventing one here would be a number nobody computed (rule #0).
+  const points = await db()<PointDbRow[]>`
+    WITH cal AS (
+      SELECT o.date FROM atlas_global.ohlcv_daily o
+      JOIN atlas_global.instrument_master m USING (instrument_id)
+      WHERE m.symbol = 'SPY' AND m.is_active
+      ORDER BY o.date DESC LIMIT ${HISTORY_SESSIONS}
+    ),
+    d0 AS (SELECT min(date) AS d FROM cal),
+    member AS (
+      SELECT DISTINCT im.instrument_id
+      FROM atlas_global.etf_classification c
+      JOIN atlas_global.instrument_master im USING (instrument_id)
+      JOIN atlas_global.taxonomy_sector tx ON tx.id = ANY (c.theme_ids) AND tx.level = 3
+      WHERE c.valid_to IS NULL AND c.status IN ('auto', 'confirmed', 'override')
+        AND im.is_active AND tx.parent_id = ${id}
+    ),
+    base AS (
+      SELECT o.instrument_id, o.close_tr
+      FROM atlas_global.ohlcv_daily o
+      JOIN member USING (instrument_id)
+      WHERE o.date = (SELECT d FROM d0) AND o.close_tr > 0
+    ),
+    -- SPY once per session, joined by date, rather than a lateral lookup per fund-day.
+    spy AS (
+      SELECT o.date, o.close_tr
+      FROM atlas_global.ohlcv_daily o
+      JOIN atlas_global.instrument_master m USING (instrument_id)
+      JOIN cal ON cal.date = o.date
+      WHERE m.symbol = 'SPY' AND m.is_active AND o.close_tr > 0
+    ),
+    spy0 AS (SELECT close_tr FROM spy WHERE date = (SELECT d FROM d0))
+    SELECT o.date::text,
+           -- ::numeric before ::text: percentile_cont returns DOUBLE PRECISION and postgres
+           -- renders a small double in scientific notation, which the board's formatters refuse.
+           (percentile_cont(0.5) WITHIN GROUP (ORDER BY o.close_tr / b.close_tr) * 100)
+             ::numeric(12,4)::text                                            AS index,
+           (max(spy.close_tr) / (SELECT close_tr FROM spy0) * 100)::numeric(12,4)::text AS spy
+    FROM atlas_global.ohlcv_daily o
+    JOIN base b ON b.instrument_id = o.instrument_id
+    JOIN cal ON cal.date = o.date
+    LEFT JOIN spy ON spy.date = o.date
+    WHERE o.close_tr > 0
+    GROUP BY o.date
+    ORDER BY o.date
+  `
+
+  const history: SectorPoint[] = points
+    .filter((p) => p.index != null)
+    .map((p) => ({ date: p.date, index: Number(p.index), spy: p.spy == null ? null : Number(p.spy) }))
+
+  return {
+    node,
+    rank: node.rank,
+    n_ranked: node.n_ranked,
+    date: tree.date,
+    stocks: stocks.map((r): SectorStock => ({
+      symbol: r.symbol,
+      name: r.name,
+      rank: r.composite == null ? null : Number(r.rank),
+      n_ranked: Number(r.n_ranked),
+      composite: r.composite,
+      decile: r.decile == null ? null : Number(r.decile),
+      rs_3m_spy: r.rs_3m_spy,
+      rs_12m_spy: r.rs_12m_spy,
+      above_ema_200: r.above_ema_200,
+      adv_usd: r.adv_usd,
+    })),
+    history,
+    history_members: history.length ? node.n_funds : 0,
+    history_from: history[0]?.date ?? null,
+  }
+}, 'sector')
+
+/** One sector: its themes and funds from the same tree /sectors ranks, its S&P 500 members, and
+ *  its own three-year line against the index. Null when the id is not a level-1 sector with a
+ *  themed fund under it. */
+export async function getSector(id: string): Promise<SectorDetail | null> {
+  if (!dbAvailable) return null
+  return detailInner(id)
 }

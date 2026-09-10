@@ -120,7 +120,7 @@ export function PulseView({ pulse }: { pulse: Pulse }) {
                         {/* Into the drill-down, where the sector opens onto its themes and their
                             funds. The pulse names a sector; the sector board says what is in it. */}
                         {s.sector_id ? (
-                          <Link href={`/sectors#${encodeURIComponent(s.sector_id)}`} className="hover:underline">
+                          <Link href={`/sectors/${encodeURIComponent(s.sector_id)}`} className="hover:underline">
                             {s.sector}
                           </Link>
                         ) : (

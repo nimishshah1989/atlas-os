@@ -1,4 +1,4 @@
-// src/app/stocks/[symbol]/page.tsx — one stock. Logic lives in components/entity.
+// src/app/sp500/[symbol]/page.tsx — one S&P 500 company. Logic lives in components/entity.
 import { InstrumentPage, symbolOf, type SymbolParams } from '@/components/entity/InstrumentPage'
 
 export async function generateMetadata(props: SymbolParams) {

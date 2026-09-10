@@ -42,9 +42,9 @@ describe('sectors → the strip', () => {
     expect(items.map((i) => i.id)).toEqual(['energy'])
   })
 
-  it('links into the drill-down, not to a page of its own, and counts its themes in words', () => {
+  it('links to the sector’s own page — the drill-down’s entry, not an anchor on a list', () => {
     const [energy] = sectorItems([sector('energy', 'Energy', '61.0', 4)])
-    expect(energy.href).toBe('/sectors#energy')
+    expect(energy.href).toBe('/sectors/energy')
     expect(energy.meta).toBe('4 themes')
     expect(sectorItems([sector('solar', 'Solar', '5.0', 1)])[0].meta).toBe('1 theme')
   })
