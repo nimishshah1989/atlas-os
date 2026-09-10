@@ -19,7 +19,7 @@ import { rsTint } from '@/lib/scores'
 import { SECTOR_WINDOWS, type SectorDetail } from '@/lib/sectors'
 import { SectorHeatmap } from './SectorHeatmap'
 import { SectorStockTable } from './SectorStockTable'
-import { SectorTrend } from './SectorTrend'
+import { MedianMemberTrend } from '@/components/shared/MedianMemberTrend'
 import { Unscored } from './Unscored'
 
 const WINDOW_LABEL: Record<(typeof SECTOR_WINDOWS)[number], string> = {
@@ -89,7 +89,7 @@ export function SectorView({ detail }: { detail: SectorDetail }) {
           note={history_from ? `since ${formatIsoDate(history_from)}, rebased to 100` : 'rebased to 100'}
         >
           <div className="panel px-3 py-3">
-            <SectorTrend name={node.name} points={history} />
+            <MedianMemberTrend name={node.name} points={history} />
             <p className="mt-1 text-meta text-ink-3">
               The MEDIAN member fund&apos;s total return, each rebased to its own close on the first
               session shown, against the S&amp;P over the same sessions.{' '}
