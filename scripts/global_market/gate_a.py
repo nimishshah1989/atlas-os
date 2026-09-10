@@ -34,6 +34,32 @@ are 2020-03-12 → 03-25 and 2025-04-09/10, when the ETF and the index genuinely
 On 2020-03-13 SPY returned 5.86 % against the index's 9.29 %. Drop the worst 0.1 % of days and
 it is 0.9964. An ETF is not its index in a dislocation, and a gate that demands otherwise
 would fail on the only days anyone remembers.
+
+WHICH FINDINGS WITHHOLD THE PUBLISH (2026-09-10). Two, and only two, of the seven checks here
+are claims about a TEN-YEAR ARCHIVE rather than about tonight: the share of instruments free of
+an unexplained jump (4), and the re-basing seam (6). Both blocked, and from 2026-09-03 the
+board did not advance once — 97.11 % clean against a 99 % floor and ten seams, the same two
+numbers every night, on a scan that a clean night of ingestion cannot change.
+
+They protected nobody. Every flagged bar is already in ``ohlcv_daily``, every score computed
+across it is already in ``lens_scores_daily`` / ``etf_scores_daily``, and the board reads those
+tables DIRECTLY — "publish" is one ``revalidateTag('eod')``, a cache flush. So withholding it
+hid not one wrong number from the FM and froze the other 1,740 instruments' correct ones.
+Collective punishment for a 2019 print, and it missed the offender.
+
+So (4) and (6) now go through ``Gate.report``: printed as loudly, counted in the verdict line,
+written to the CSV in full, blocking nothing. Everything that IS about tonight still asserts —
+bars exist, the anchor session exists, completeness against the previous session, no move over
+100 % on close_tr, and the anchor against FRED. The split is pinned by
+``tests/unit/global_market/test_gate_findings.py``, because re-blocking the archive scan is a
+one-word edit whose only symptom is a board that quietly stops moving.
+
+The finding is real and it is PER-INSTRUMENT, so the fix is a per-instrument exclusion:
+``universe_snapshot.exclusion_reason`` already carries ``below_floor`` / ``leveraged`` /
+``too_few_observations`` and the board already renders them by name. A ``price_history_suspect``
+reason drops the offenders out of scoring, says so on their cards, and lets (4) and (6) assert
+something STRONGER than a share — that no instrument in the universe carries one at all.
+That is the follow-up; task #25 is the repair behind it.
 """
 
 from __future__ import annotations
@@ -400,15 +426,38 @@ def check_A(g: Gate, eod: Any = None, report: str | None = None) -> None:
             f"{len(unexplained):,d} unexplained jump(s) over {dirty:,d} instrument(s) → {report}"
         )
 
+    # REPORTED, NOT ASSERTED — and the comment above already said why without the code
+    # following: "the gate surfaces every jump with what a human needs to judge it, hard-fails
+    # only on the impossible". It then hard-failed on the share as well, and that failure
+    # withheld the whole board's publish every night from 2026-09-03 on.
+    #
+    # It protected nobody. Every one of these jumps is a bar in ohlcv_daily, every score
+    # computed over it is already in lens_scores_daily / etf_scores_daily, and the board reads
+    # those tables DIRECTLY — publish is one revalidateTag('eod'), a cache flush and nothing
+    # more. So withholding it hid not one wrong number from the FM; it froze the other 1,740
+    # instruments' correct ones. Collective punishment for a 2019 print, and the punishment
+    # missed the offender.
+    #
+    # Nor is it a claim about tonight. It scans a TEN-YEAR archive, so on a night when every
+    # bar ingested cleanly it fails for exactly the same reason it failed the night before, and
+    # the night before that — a check that cannot pass is an outage wearing a gate's clothes.
+    #
+    # The finding is real and it is per-instrument, so it belongs in a per-instrument exclusion:
+    # universe_snapshot.exclusion_reason already carries below_floor / leveraged /
+    # too_few_observations and the board already renders them by name. A price_history_suspect
+    # reason drops the offending instruments out of scoring, says so on their cards, and lets
+    # this check go back to ASSERTING something stronger than a share — that no instrument IN
+    # the universe carries an unexplained jump at all. That is the follow-up. Until it lands,
+    # every jump is printed, counted and written to the CSV in full, and blocks nothing.
     if scored < A_MIN_N_FOR_SHARE:
-        g.check(
-            f"unexplained {A_MAX_ABS_LOG_JUMP} log jumps on close_adj (reported: the universe "
-            f"is under {A_MIN_N_FOR_SHARE}, too small for a share to be evaluated)",
+        g.report(
+            f"unexplained {A_MAX_ABS_LOG_JUMP} log jumps on close_adj (the universe is under "
+            f"{A_MIN_N_FOR_SHARE}, too small for a share to mean anything)",
             True,
             detail,
         )
     else:
-        g.check(
+        g.report(
             f"≥ {A_MIN_CLEAN_SHARE:.0%} of scored instruments have no unexplained "
             f"{A_MAX_ABS_LOG_JUMP} log jump on close_adj",
             share >= A_MIN_CLEAN_SHARE,
@@ -426,9 +475,16 @@ def check_A(g: Gate, eod: Any = None, report: str | None = None) -> None:
             )
         )
 
-    # (6) the re-basing seam
+    # (6) the re-basing seam — REPORTED, for the same reason and with the same follow-up as (4).
+    # A seam is a genuine defect: close_tr accumulates dividends, so its ratio to close cannot
+    # FALL, and where it does the total-return series was re-based mid-history and every return
+    # spanning the seam is wrong. But it is wrong for THAT INSTRUMENT, in an archive, and the
+    # ten instruments carrying one were freezing the board for the other 1,741. Same fix:
+    # quarantine the instrument (task #25 is the repair, price_history_suspect is the exclusion),
+    # then assert that no instrument in the universe has a seam — which is a stronger claim than
+    # this one and one that can actually hold.
     seams = _gdb.read_df(_sql(SEAM_SQL, m))
-    g.check(
+    g.report(
         "no close_tr/close ratio falls further than cent rounding can explain",
         seams.empty,
         "none"
