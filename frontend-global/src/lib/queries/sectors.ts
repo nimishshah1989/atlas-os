@@ -220,10 +220,17 @@ export async function getSectorTree(): Promise<SectorTree> {
 // ── one sector's own page ───────────────────────────────────────────────────
 
 /** How far back the sector's own line is drawn, in SESSIONS not calendar days — the same window
- *  rule queries/series.ts states: a LIMIT over trading days gives every instrument the same
- *  number of observations whoever was closed for a holiday. Three years is the shortest window in
- *  which a sector rotation is visible at all and the longest that stays one cheap query. */
+ *  rule queries/series.ts states: a LIMIT over trading days gives every instrument the same number
+ *  of observations whoever was closed for a holiday. Three years is the shortest window in which a
+ *  sector rotation is visible at all. */
 const HISTORY_SESSIONS = 756
+
+/** …and only every fifth of them is plotted. A three-year trend line is the SAME line at weekly
+ *  resolution, and this is a page load: the daily version made a cold sector page take 24 seconds
+ *  on the live board, because a median has to be computed per date over every member fund. The
+ *  oldest session is always kept whatever the stride lands on — it is the base every fund is
+ *  rebased to, so losing it would lose the line. */
+const HISTORY_STRIDE = 5
 
 type StockDbRow = {
   symbol: string
@@ -305,11 +312,16 @@ const detailInner = eodCached(async (id: string): Promise<SectorDetail | null> =
   // alternative — a chained index over changing membership — is a producer's job, not a page's,
   // and inventing one here would be a number nobody computed (rule #0).
   const points = await db()<PointDbRow[]>`
-    WITH cal AS (
-      SELECT o.date FROM atlas_global.ohlcv_daily o
+    WITH spy_cal AS (
+      SELECT o.date, o.close_tr, row_number() OVER (ORDER BY o.date DESC) AS rn
+      FROM atlas_global.ohlcv_daily o
       JOIN atlas_global.instrument_master m USING (instrument_id)
-      WHERE m.symbol = 'SPY' AND m.is_active
-      ORDER BY o.date DESC LIMIT ${HISTORY_SESSIONS}
+      WHERE m.symbol = 'SPY' AND m.is_active AND o.close_tr > 0
+    ),
+    cal AS (
+      SELECT date, close_tr FROM spy_cal
+      WHERE rn <= ${HISTORY_SESSIONS}
+        AND (rn % ${HISTORY_STRIDE} = 1 OR rn = ${HISTORY_SESSIONS})
     ),
     d0 AS (SELECT min(date) AS d FROM cal),
     member AS (
@@ -326,26 +338,19 @@ const detailInner = eodCached(async (id: string): Promise<SectorDetail | null> =
       JOIN member USING (instrument_id)
       WHERE o.date = (SELECT d FROM d0) AND o.close_tr > 0
     ),
-    -- SPY once per session, joined by date, rather than a lateral lookup per fund-day.
-    spy AS (
-      SELECT o.date, o.close_tr
-      FROM atlas_global.ohlcv_daily o
-      JOIN atlas_global.instrument_master m USING (instrument_id)
-      JOIN cal ON cal.date = o.date
-      WHERE m.symbol = 'SPY' AND m.is_active AND o.close_tr > 0
-    ),
-    spy0 AS (SELECT close_tr FROM spy WHERE date = (SELECT d FROM d0))
+    spy0 AS (SELECT close_tr FROM cal WHERE date = (SELECT d FROM d0))
     SELECT o.date::text,
            -- ::numeric before ::text: percentile_cont returns DOUBLE PRECISION and postgres
            -- renders a small double in scientific notation, which the board's formatters refuse.
            (percentile_cont(0.5) WITHIN GROUP (ORDER BY o.close_tr / b.close_tr) * 100)
-             ::numeric(12,4)::text                                            AS index,
-           (max(spy.close_tr) / (SELECT close_tr FROM spy0) * 100)::numeric(12,4)::text AS spy
+             ::numeric(12,4)::text                                                  AS index,
+           (max(cal.close_tr) / (SELECT close_tr FROM spy0) * 100)::numeric(12,4)::text AS spy
     FROM atlas_global.ohlcv_daily o
     JOIN base b ON b.instrument_id = o.instrument_id
     JOIN cal ON cal.date = o.date
-    LEFT JOIN spy ON spy.date = o.date
-    WHERE o.close_tr > 0
+    -- The lower bound is the point of this line: ohlcv_daily is keyed (instrument_id, date), and
+    -- without it the planner has no range to scan and reads every bar these funds ever had.
+    WHERE o.date >= (SELECT d FROM d0) AND o.close_tr > 0
     GROUP BY o.date
     ORDER BY o.date
   `
