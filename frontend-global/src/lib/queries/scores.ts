@@ -69,6 +69,10 @@ const etfListInner = eodCached(async (): Promise<ListRow[]> => {
     ranked AS (
       SELECT s.instrument_id, s.technical, s.composite, s.conviction_tier, s.peer_group,
              s.lenses_active,
+             -- Every lens the blend carries, not just the technical one. A fund manager choosing
+             -- between two funds an inch apart on composite is choosing on THESE: one is cheap
+             -- and liquid, the other concentrated and dear, and the composite says neither.
+             s.risk, s.cost_liquidity, s.flow, s.quality,
              CASE WHEN s.composite IS NULL OR s.peer_group IS NULL THEN NULL ELSE
                ntile(10) OVER (PARTITION BY s.date, s.peer_group, (s.composite IS NULL)
                                ORDER BY s.composite)
@@ -86,10 +90,21 @@ const etfListInner = eodCached(async (): Promise<ListRow[]> => {
       m.symbol, m.name, m.asset_class, m.sector_gics,
       u.in_universe, u.exclusion_reason AS universe_exclusion,
       c.strategy, c.asset_class AS class_asset_class, tx.name AS theme,
+      tx.id                    AS theme_id,
       c.leveraged, c.inverse, c.hedged, c.status AS class_status,
       co.name AS country, co.region,
       r.composite::text        AS composite,
       r.technical::text        AS technical,
+      r.risk::text             AS risk,
+      r.cost_liquidity::text   AS cost_liquidity,
+      r.flow::text             AS flow,
+      r.quality::text          AS quality,
+      NULL::text AS fundamental, NULL::text AS valuation, NULL::text AS catalyst,
+      -- The two facts that decide between near-identical funds, and the one that says whether the
+      -- fund is in an uptrend at all. All three come from producers, none is derived here.
+      em.expense_ratio::text   AS expense_ratio,
+      em.aum_usd::text         AS aum_usd,
+      t.above_ema_200          AS above_ema_200,
       r.conviction_tier, r.peer_group,
       r.lenses_active::int     AS lenses_active,
       r.composite_decile::int  AS composite_decile,
@@ -120,6 +135,7 @@ const etfListInner = eodCached(async (): Promise<ListRow[]> => {
     -- The theme the rule table settled FIRST — its primary bet. A fund can carry up to three and
     -- /themes shows it under each; this column is the one word the explorer filters on.
     LEFT JOIN atlas_global.taxonomy_sector tx ON tx.id = c.theme_ids[1]
+    LEFT JOIN atlas_global.etf_meta em ON em.instrument_id = m.instrument_id
     WHERE m.is_active AND m.asset_class = 'etf'
     ORDER BY m.symbol
   `
@@ -141,6 +157,10 @@ const stockListInner = eodCached(async (): Promise<ListRow[]> => {
     ranked AS (
       SELECT s.instrument_id, s.technical, s.composite, s.conviction_tier,
              s.cap_cohort AS peer_group, s.lenses_active,
+             -- The stock journal's own lenses. Valuation is an OVERLAY on this board (weight 0 in
+             -- the blend) and is carried anyway: "cheap" is a column an FM reads even where the
+             -- composite is forbidden from using it.
+             s.fundamental, s.valuation, s.catalyst, s.flow,
              CASE WHEN s.composite IS NULL THEN NULL ELSE
                ntile(10) OVER (PARTITION BY s.date, s.cap_cohort, (s.composite IS NULL)
                                ORDER BY s.composite)
@@ -157,10 +177,21 @@ const stockListInner = eodCached(async (): Promise<ListRow[]> => {
       m.symbol, m.name, m.asset_class, m.sector_gics,
       u.in_universe, u.exclusion_reason AS universe_exclusion,
       NULL::text AS strategy, NULL::text AS class_asset_class, NULL::text AS theme,
+      NULL::text AS theme_id,
       NULL::boolean AS leveraged, NULL::boolean AS inverse, NULL::boolean AS hedged,
       NULL::text AS class_status, NULL::text AS country, NULL::text AS region,
       r.composite::text        AS composite,
       r.technical::text        AS technical,
+      NULL::text AS risk, NULL::text AS cost_liquidity,
+      r.flow::text             AS flow,
+      NULL::text AS quality,
+      r.fundamental::text      AS fundamental,
+      r.valuation::text        AS valuation,
+      r.catalyst::text         AS catalyst,
+      -- A company has no expense ratio and no fund assets. NULL is the real value, and the column
+      -- simply does not appear in the stock column set.
+      NULL::text AS expense_ratio, NULL::text AS aum_usd,
+      t.above_ema_200          AS above_ema_200,
       r.conviction_tier, r.peer_group,
       r.lenses_active::int     AS lenses_active,
       r.composite_decile::int  AS composite_decile,

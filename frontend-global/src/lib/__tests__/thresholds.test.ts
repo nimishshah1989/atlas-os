@@ -12,6 +12,7 @@
 // not a calm fund. Letting nulls through would put exactly the unmeasured funds at the top of the
 // safest screen anyone runs.
 import { describe, expect, it } from 'vitest'
+import { NOT_CAPTURED } from './laterColumns'
 import { ALL, applyFilters, facetCounts, parseState, serialiseState, type FacetGroup, type SortState } from '@/lib/explorer'
 import { toInstrumentRow, type InstrumentDbRow, type InstrumentRow } from '@/lib/facts'
 
@@ -36,6 +37,7 @@ const BASE = {
   pos_52w: null,
   rs_3m_spy: null,
   rs_6m_spy: null,
+  ...NOT_CAPTURED,
 } as const
 
 const RAW: InstrumentDbRow[] = [

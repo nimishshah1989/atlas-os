@@ -31,6 +31,8 @@ export type InstrumentDbRow = {
    *  in that ordered table to read the fund's name. Null on stocks, and on a fund whose name
    *  names no theme — most broad-market funds are a bet on nothing narrower than the market. */
   theme: string | null
+  /** The same theme's taxonomy id, so the cell can be a link to its board rather than a word. */
+  theme_id: string | null
   class_asset_class: string | null
   leveraged: boolean | null
   inverse: boolean | null
@@ -42,6 +44,16 @@ export type InstrumentDbRow = {
   // ── the score row (etf_scores_daily / lens_scores_daily) at the latest scored session ≤ EOD
   composite: string | null
   technical: string | null
+  /** The rest of the blend. ETFs carry risk / cost_liquidity / quality; stocks carry fundamental /
+   *  valuation / catalyst; both carry flow. The other side is NULL, which is the real value —
+   *  a company has no cost-and-liquidity lens — and the column simply does not appear there. */
+  risk: string | null
+  cost_liquidity: string | null
+  flow: string | null
+  quality: string | null
+  fundamental: string | null
+  valuation: string | null
+  catalyst: string | null
   conviction_tier: string | null
   /** ETFs: `etf_scores_daily.peer_group`. Stocks: `lens_scores_daily.cap_cohort`. Both name the
    *  population the decile below was cut in. */
@@ -59,6 +71,12 @@ export type InstrumentDbRow = {
   adv_usd: string | null
   vol_ann: string | null
   mdd_12m: string | null
+  /** Trading above its own 200-day average. NULL until the instrument has 200 sessions — a fund
+   *  listed in March has not FAILED this test, so it renders as unknown and never as "no". */
+  above_ema_200: boolean | null
+  // ── etf_meta: the two facts that separate near-identical funds
+  expense_ratio: string | null
+  aum_usd: string | null
 }
 
 /** A snake_case token as words, for values that arrive as machine tokens (an exclusion reason). */

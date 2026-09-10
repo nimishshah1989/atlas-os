@@ -4,6 +4,7 @@
 // $1,000,000). Every score column is null because etf_scores_daily held no rows on that date —
 // which is the state the board must render, not a stand-in for one it does not have (rule #0).
 import { describe, expect, it } from 'vitest'
+import { NOT_CAPTURED } from './laterColumns'
 import {
   ALL,
   applyFilters,
@@ -14,6 +15,7 @@ import {
   parseState,
   serialiseState,
   sortRows,
+  visibleOptions,
   type FacetGroup,
   type SortState,
 } from '@/lib/explorer'
@@ -24,6 +26,7 @@ const UNSCORED = {
   strategy: null, theme: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
   class_status: null, country: null, region: null,
   composite: null, technical: null, conviction_tier: null, peer_group: null, lenses_active: null,
+  ...NOT_CAPTURED,
   composite_decile: null, peer_rank: null, peer_n: null,
   rs_3m_spy: null, rs_6m_spy: null, rs_12m_spy: null, pos_52w: null, adv_usd: null,
   vol_ann: null, mdd_12m: null,
@@ -161,5 +164,38 @@ describe('sortRows over a composite', () => {
   })
   it('sorts the real rows by symbol without a score column', () => {
     expect(sortRows(ETFS, BY_SYMBOL, (r) => r.symbol).map((r) => r.symbol)).toEqual(['ILCB', 'QQQ', 'SH', 'SPY', 'TQQQ'])
+  })
+})
+
+// ── the rail hides what the current selection has emptied ───────────────────
+//
+// The FM, filtering /etfs to thematic funds and looking at the left rail: "I have these filters on
+// country, where most of the countries are zero, only showing zero. Why do we even have that
+// filter, right?" Forty options nobody can choose is a wall of noise in front of the four that
+// matter. These assert the rule and, as importantly, the two cases it must NOT break.
+describe('an option nobody can choose is not offered', () => {
+  const counts = { japan: 0, brazil: 0, none: 12 }
+
+  it('drops the options the selection has emptied and keeps the ones with rows', () => {
+    expect(visibleOptions('any', ['japan', 'brazil', 'none'], counts, [])).toEqual(['none'])
+  })
+
+  it('hides the whole rail when every option is empty', () => {
+    expect(visibleOptions('any', ['japan', 'brazil'], { japan: 0, brazil: 0 }, [])).toEqual([])
+  })
+
+  it('KEEPS a ticked option however empty it is — a filter you cannot untick is a trap', () => {
+    expect(visibleOptions('any', ['japan', 'brazil', 'none'], counts, ['japan'])).toEqual([
+      'japan',
+      'none',
+    ])
+  })
+
+  it('leaves a single-choice ladder whole, because a scale with rungs missing is not a scale', () => {
+    // The decile rail: ten rungs in rank order. Hiding the empty ones would renumber the scale.
+    const deciles = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', ALL]
+    const sparse = { '7': 3, '10': 1 }
+    expect(visibleOptions('one', deciles, sparse, [])).toEqual(deciles)
+    expect(visibleOptions('min', ['10000000', '50000000', ALL], {}, [])).toHaveLength(3)
   })
 })

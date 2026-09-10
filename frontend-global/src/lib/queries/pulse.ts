@@ -52,6 +52,10 @@ export type Breadth = {
 /** Breadth inside one GICS sector (stocks) — the same shape, cut by sector. */
 export type SectorBreadth = {
   sector: string
+  /** `taxonomy_sector.id` for the same GICS level-1 name, so the row can open the drill-down.
+   *  Null when the taxonomy has not been seeded — the row still renders, it just does not link,
+   *  rather than sending a reader to /sectors#undefined. */
+  sector_id: string | null
   members: number
   measured_ema200: number
   above_ema200: number
@@ -150,6 +154,10 @@ const inner = eodCached(async (): Promise<Pulse> => {
                       WHERE date <= (SELECT as_of_d FROM a))
     )
     SELECT u.sector,
+           -- The id comes from taxonomy_sector, never from slugging the display name here: the
+           -- two spellings are maintained in different files and the day they diverge, a derived
+           -- slug produces a dead anchor with nothing to catch it.
+           max(tx.id)                                                  AS sector_id,
            count(*)                                                    AS members,
            count(t.above_ema_200)                                      AS measured_ema200,
            count(*) FILTER (WHERE t.above_ema_200)                     AS above_ema200,
@@ -162,6 +170,8 @@ const inner = eodCached(async (): Promise<Pulse> => {
       ON t.instrument_id = u.instrument_id
      AND t.date = (SELECT MAX(date) FROM atlas_global.technical_daily WHERE date <= (SELECT as_of_d FROM a))
     LEFT JOIN scored ON scored.instrument_id = u.instrument_id
+    LEFT JOIN atlas_global.taxonomy_sector tx
+           ON tx.level = 1 AND tx.is_active AND lower(tx.name) = lower(u.sector)
     GROUP BY u.sector
     ORDER BY u.sector
   `

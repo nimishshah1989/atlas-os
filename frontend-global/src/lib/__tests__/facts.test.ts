@@ -3,6 +3,7 @@
 // on 2026-09-04, membership by ingest_index_membership.py, bars by import_stooq.py), read with
 // psql on 2026-09-06 — no row is invented (rule #0). The SQL that produced each block is quoted.
 import { describe, expect, it } from 'vitest'
+import { NOT_CAPTURED } from './laterColumns'
 import {
   describeBars,
   describeInterval,
@@ -39,6 +40,7 @@ const UNWRITTEN = {
   composite_decile: null, peer_rank: null, peer_n: null,
   rs_3m_spy: null, rs_6m_spy: null, rs_12m_spy: null, pos_52w: null, adv_usd: null,
   vol_ann: null, mdd_12m: null,
+  ...NOT_CAPTURED,
 } as const
 
 const SPY: InstrumentDbRow = {

@@ -7,6 +7,7 @@
 // doing" an FM can act on.
 //
 // EVERY SHARE IS OVER WHAT WAS MEASURED, never over what was listed. See BreadthBar.
+import Link from 'next/link'
 import { BreadthBar } from '@/components/pulse/BreadthBar'
 import { Section } from '@/components/ui/Section'
 import { formatIsoDate, formatNum, formatPct } from '@/lib/format'
@@ -114,8 +115,18 @@ export function PulseView({ pulse }: { pulse: Pulse }) {
                 {[...sectors]
                   .sort((a, b) => share(b.above_ema200, b.measured_ema200) - share(a.above_ema200, a.measured_ema200))
                   .map((s) => (
-                    <tr key={s.sector}>
-                      <td className="text-ink">{s.sector}</td>
+                    <tr key={s.sector} className="hover:bg-raised">
+                      <td className="text-ink">
+                        {/* Into the drill-down, where the sector opens onto its themes and their
+                            funds. The pulse names a sector; the sector board says what is in it. */}
+                        {s.sector_id ? (
+                          <Link href={`/sectors#${encodeURIComponent(s.sector_id)}`} className="hover:underline">
+                            {s.sector}
+                          </Link>
+                        ) : (
+                          s.sector
+                        )}
+                      </td>
                       <td className="num text-right text-ink-2">{formatNum(s.members)}</td>
                       <td className="num text-right">{fraction(s.above_ema200, s.measured_ema200)}</td>
                       <td className="num text-right">{fraction(s.beating_3m, s.measured_rs_3m)}</td>
@@ -138,11 +149,21 @@ export function PulseView({ pulse }: { pulse: Pulse }) {
 
 const share = (count: number, measured: number) => (measured === 0 ? -1 : count / measured)
 
+/** A share with HALF as its baseline: green when more of the population is doing the thing than
+ *  is not, red when it is the other way. The count and its denominator are printed either way, so
+ *  the colour is the second channel and never the only one (scores.ts rule 3). */
 function fraction(count: number, measured: number) {
   if (measured === 0) return <span className="text-ink-3">—</span>
+  const share = count / measured
+  const token = share >= 0.5 ? 'var(--color-pos)' : 'var(--color-neg)'
+  // Distance from half, doubled, is the saturation: 50 percent is bare, 0 or 100 is full.
+  const ink = Math.min(Math.abs(share - 0.5) * 2, 1) * 62
   return (
-    <span className="text-ink">
-      {((count / measured) * 100).toFixed(0)}%<span className="ml-1 text-ink-3">{count}/{measured}</span>
+    <span
+      className="rounded-tile px-1 py-px text-ink"
+      style={{ background: `color-mix(in srgb, ${token} ${ink.toFixed(0)}%, transparent)` }}
+    >
+      {(share * 100).toFixed(0)}%<span className="ml-1 text-ink-3">{count}/{measured}</span>
     </span>
   )
 }

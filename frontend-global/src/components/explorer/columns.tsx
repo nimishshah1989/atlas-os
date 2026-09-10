@@ -19,7 +19,7 @@ import { DecileChip, LeaderMark } from '@/components/ui/DecileChip'
 import { DecileMeter } from '@/components/ui/DecileMeter'
 import { LensBar } from '@/components/ui/LensBar'
 import type { AssetClass, InstrumentRow } from '@/lib/facts'
-import { formatDecimal, formatPct, formatUsd } from '@/lib/format'
+import { formatDecimal, formatPct, formatUsd, formatUsdCompact } from '@/lib/format'
 import {
   lensesLabel,
   lensesShort,
@@ -199,7 +199,10 @@ type RsKey = 'rs_3m_spy' | 'rs_6m_spy' | 'rs_12m_spy'
 const rs = (key: RsKey, label: string): Column<InstrumentRow> => ({
   key,
   label,
-  width: 64,
+  // 64 px held "+8.4%" and ellipsised everything longer, so a column of relative strengths read
+  // "+8… +26… +47…" — the FM: "look at these numbers and how they are getting cut. I can't even
+  // make sense of it." A signed percentage with a tenth is up to seven characters ("+129.4%").
+  width: 82,
   align: 'right',
   title: `Relative strength vs SPY, ${label} — (1+r_fund)/(1+r_SPY) − 1, what is left after the index`,
   sortValue: (r) => orderBy(r[key]),
@@ -223,11 +226,18 @@ const POS_52W: Column<InstrumentRow> = {
 const ADV: Column<InstrumentRow> = {
   key: 'adv',
   label: 'ADV$',
-  width: 88,
+  width: 76,
   align: 'right',
   title: 'Median daily traded value over 60 sessions — the liquidity the universe floor is set on',
   sortValue: (r) => orderBy(r.adv_usd),
-  render: (r) => formatUsd(r.adv_usd, 0),
+  // COMPACT, and narrower than it was. "$129,145,821" needs about 85 px of text and was rendering
+  // as "$129,1…"; "$129M" needs 40 and can be compared against "$1.8B" at a glance, which two
+  // truncations cannot. The exact figure is the cell's own title, one hover away.
+  render: (r) => (
+    <span title={r.adv_usd == null ? undefined : formatUsd(r.adv_usd, 0)}>
+      {formatUsdCompact(r.adv_usd)}
+    </span>
+  ),
 }
 
 // ── the risk overlay (displayed, not blended) ───────────────────────────────
@@ -263,18 +273,160 @@ export const universeColumn = (label: (r: InstrumentRow) => string): Column<Inst
   render: (r) => <span className={r.in_universe ? 'text-ink-3' : 'text-ink-2'}>{label(r)}</span>,
 })
 
-// ── the two column sets ─────────────────────────────────────────────────────
+
+// ── what the fund COSTS and how big it is ───────────────────────────────────
+
+const THEME_COL: Column<InstrumentRow> = {
+  key: 'theme_col',
+  label: 'Theme',
+  width: 150,
+  title: 'What the fund is a bet ON, from the name. Opens every other fund making the same bet.',
+  sortValue: (r) => r.theme ?? '',
+  render: (r) =>
+    // A word that goes nowhere is a label; a word that goes somewhere is the drill-down the FM
+    // asked for. A fund with no theme is not a gap — most of the listed universe is a bet on
+    // nothing narrower than the market — so it reads as words rather than an em dash.
+    r.theme && r.theme_id ? (
+      <Link href={`/themes/${encodeURIComponent(r.theme_id)}`} className="text-ink hover:underline" title={r.theme}>
+        {r.theme}
+      </Link>
+    ) : (
+      <span className="text-ink-3">no theme in the name</span>
+    ),
+}
+
+const EXPENSE: Column<InstrumentRow> = {
+  key: 'expense',
+  label: 'Fee',
+  width: 62,
+  align: 'right',
+  title:
+    'Annual expense ratio. The one cost that is certain before you own it, and the one number ' +
+    'that compounds against you every year you do.',
+  sortValue: (r) => orderBy(r.expense_ratio),
+  // A fee is a fraction (0.0075 = 0.75 percent), and two decimals because the difference between
+  // 0.03 and 0.09 percent is a threefold difference in what it costs to hold.
+  render: (r) => formatPct(r.expense_ratio, 2),
+}
+
+const AUM: Column<InstrumentRow> = {
+  key: 'aum',
+  label: 'Assets',
+  width: 76,
+  align: 'right',
+  title: 'Fund assets under management, with its as-of date on the fund’s own page',
+  sortValue: (r) => orderBy(r.aum_usd),
+  render: (r) => (
+    <span title={r.aum_usd == null ? undefined : formatUsd(r.aum_usd, 0)}>
+      {formatUsdCompact(r.aum_usd)}
+    </span>
+  ),
+}
+
+const TREND: Column<InstrumentRow> = {
+  key: 'trend',
+  label: '200d',
+  width: 52,
+  align: 'right',
+  title:
+    'Above its own 200-day average. Blank means the instrument has fewer than 200 sessions — ' +
+    'it has not FAILED a test nobody could run on it (rule #0).',
+  sortValue: (r) => (r.above_ema_200 == null ? null : r.above_ema_200 ? 1 : 0),
+  render: (r) =>
+    r.above_ema_200 == null ? (
+      <span className="text-ink-3" title="Fewer than 200 sessions">
+        —
+      </span>
+    ) : (
+      // The glyph and the colour say the same thing twice, so the column reads in greyscale.
+      <span style={{ color: r.above_ema_200 ? 'var(--color-pos)' : 'var(--color-neg)' }}>
+        {r.above_ema_200 ? '▲' : '▼'}
+      </span>
+    ),
+}
+
+// ── every lens the blend carries, side by side ──────────────────────────────
+
+/** One lens as a 0–100 number with its own decile behind it. The FM, on two funds an inch apart
+ *  on composite: the lens columns are what says one is cheap and liquid and the other is not. */
+const lensColumn = (key: 'risk' | 'cost_liquidity' | 'flow' | 'quality' | 'fundamental' | 'valuation' | 'catalyst', label: string, title: string): Column<InstrumentRow> => ({
+  key: `lens_${key}`,
+  label,
+  width: 66,
+  align: 'right',
+  title,
+  sortValue: (r) => orderBy(r[key]),
+  // Null renders as an em dash, never 0: a fund is not bad at a lens nobody measured (rule #0).
+  render: (r) => formatDecimal(r[key], 0),
+})
+
+const ETF_LENS_COLUMNS = [
+  lensColumn('risk', 'Risk', 'Volatility, drawdown and beta within the asset group. An OVERLAY: displayed, not blended.'),
+  lensColumn('cost_liquidity', 'Cost', 'Expense ratio, traded value, assets and concentration, each as a percentile within the asset group.'),
+  lensColumn('flow', 'Flow', 'Change in shares outstanding — creations and redemptions — centred at 50.'),
+  lensColumn('quality', 'Quality', 'The holdings looked through to their own stock scores. Present only where enough of the fund is scoreable.'),
+]
+
+const STOCK_LENS_COLUMNS = [
+  lensColumn('fundamental', 'Fundamental', 'Profitability, margins, growth, balance sheet and operating leverage from the filings.'),
+  lensColumn('valuation', 'Valuation', 'Multiples against the sector cross-section. An OVERLAY: displayed, not blended.'),
+  lensColumn('catalyst', 'Catalyst', '8-K item codes with recency decay — what the registrant itself filed.'),
+  lensColumn('flow', 'Flow', 'Short interest and its change, from FINRA’s twice-monthly settlement.'),
+]
+
+// ── the column sets ─────────────────────────────────────────────────────────
 
 const SCORE_COLUMNS = (ctx: ColumnContext) => [COMPOSITE, CONVICTION, lenses(ctx), technical(ctx)]
 const PRICE_COLUMNS = [rs('rs_3m_spy', 'RS 3m'), rs('rs_6m_spy', 'RS 6m'), rs('rs_12m_spy', 'RS 12m'), POS_52W, ADV]
 const RISK_COLUMNS = [VOL, MDD]
 
-/** The board's columns for this market, with the score block dropped entirely when nothing is
- *  scored yet — a wall of em dashes is not a state, it is a shrug. */
-export function boardColumns(ctx: ColumnContext, scored: boolean): Column<InstrumentRow>[] {
-  const identity =
-    ctx.assetClass === 'etf'
-      ? [symbol('etf'), NAME, PEER]
-      : [symbol('stock'), NAME, SECTOR_COL, COHORT]
-  return [...identity, ...(scored ? SCORE_COLUMNS(ctx) : []), ...PRICE_COLUMNS, ...RISK_COLUMNS]
+/** WHICH QUESTION THE TABLE IS ANSWERING RIGHT NOW.
+ *
+ *  The FM asked for two things that pull against each other in the same breath: "the table can be
+ *  so much richer… we need some more important columns here", and "I don't want this platform to
+ *  be more crowded than I'm asking you to." Thirty columns at once satisfies the first and breaks
+ *  the second. Three named views satisfy both: the data is all here, and the reader says which
+ *  question they are asking rather than reading past twenty answers to the ones they are not.
+ *
+ *  Identity never changes between views, so a row stays the same row when the view does. */
+export const VIEWS = ['ranking', 'lenses', 'cost'] as const
+export type BoardView = (typeof VIEWS)[number]
+
+export const VIEW_LABEL: Record<BoardView, string> = {
+  ranking: 'Ranking',
+  lenses: 'Lenses',
+  cost: 'Cost & size',
+}
+
+export const VIEW_NOTE: Record<BoardView, string> = {
+  ranking: 'The score, what it is made of, and the price evidence behind it.',
+  lenses: 'Every lens side by side — where two near-identical scores actually differ.',
+  cost: 'What it is a bet on, what it costs to hold, how big it is and whether it is trending.',
+}
+
+export function isBoardView(v: string | null | undefined): v is BoardView {
+  return v != null && (VIEWS as readonly string[]).includes(v)
+}
+
+/** The board's columns for this market and view, with the score block dropped entirely when
+ *  nothing is scored yet — a wall of em dashes is not a state, it is a shrug. */
+export function boardColumns(ctx: ColumnContext, scored: boolean, view: BoardView = 'ranking'): Column<InstrumentRow>[] {
+  const etf = ctx.assetClass === 'etf'
+  const identity = etf ? [symbol('etf'), NAME, PEER] : [symbol('stock'), NAME, SECTOR_COL, COHORT]
+
+  // Nothing scored: the lens view has nothing to show, so it falls back rather than rendering a
+  // grid of dashes the reader has to interpret.
+  if (!scored) return [...identity, ...PRICE_COLUMNS, ...RISK_COLUMNS]
+
+  if (view === 'lenses') {
+    return [...identity, COMPOSITE, lenses(ctx), technical(ctx), ...(etf ? ETF_LENS_COLUMNS : STOCK_LENS_COLUMNS)]
+  }
+  if (view === 'cost') {
+    // A company has no expense ratio and no fund assets, so on the stock board this view is what
+    // it can honestly be: the sector, the trend and the liquidity.
+    return etf
+      ? [...identity, COMPOSITE, THEME_COL, EXPENSE, AUM, ADV, TREND, POS_52W]
+      : [...identity, COMPOSITE, ADV, TREND, POS_52W, VOL, MDD]
+  }
+  return [...identity, ...SCORE_COLUMNS(ctx), ...PRICE_COLUMNS, ...RISK_COLUMNS]
 }

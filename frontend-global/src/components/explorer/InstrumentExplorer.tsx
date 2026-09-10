@@ -30,7 +30,14 @@ import {
 import { formatIsoDate } from '@/lib/format'
 import type { InstrumentList } from '@/lib/queries/scores'
 import { lensesLabel, peerGroupLabel, peerGroupOf, TIER_LABEL } from '@/lib/scores'
-import { boardColumns, universeColumn, type ColumnContext } from './columns'
+import {
+  boardColumns,
+  universeColumn,
+  VIEW_LABEL,
+  VIEW_NOTE,
+  VIEWS,
+  type ColumnContext,
+} from './columns'
 import { Explorer } from './Explorer'
 import { StrengthRiskBubble } from './StrengthRiskBubble'
 
@@ -228,10 +235,25 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
     [assetClass, list.lenses],
   )
 
-  const columns = useMemo(() => {
-    const base = boardColumns(ctx, scored)
-    return universe && widened ? [...base, universeColumn((r) => universeLabel(universeValue(r)))] : base
+  // Three named sets of the SAME rows — the score and its evidence, every lens side by side, and
+  // what the fund costs. The FM asked for both halves of this in one breath: "the table can be so
+  // much richer… we need some more important columns here", and "I don't want this platform to be
+  // more crowded than I'm asking you to". Thirty columns satisfies the first and breaks the
+  // second; three questions satisfies both.
+  //
+  // Until anything is scored there is one honest set, so no switch is offered — a picker whose
+  // options all render the same dashes is a control that does nothing.
+  const columnSets = useMemo(() => {
+    const tail = universe && widened ? [universeColumn((r) => universeLabel(universeValue(r)))] : []
+    return VIEWS.map((v) => ({
+      key: v,
+      label: VIEW_LABEL[v],
+      note: VIEW_NOTE[v],
+      columns: [...boardColumns(ctx, scored, v), ...tail],
+    }))
   }, [ctx, scored, universe, widened])
+
+  const columns = columnSets[0].columns
 
   const groups = useMemo(() => {
     const g: FacetGroup<InstrumentRow>[] = []
@@ -294,6 +316,7 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
       <Explorer
         rows={rows}
         columns={columns}
+        columnSets={scored ? columnSets : undefined}
         groups={groups}
         defaultSort={defaultSort}
         rowKey={(r) => r.symbol}

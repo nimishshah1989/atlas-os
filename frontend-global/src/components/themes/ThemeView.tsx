@@ -3,6 +3,7 @@
 // MEMBERS, and the page says which member and how many.
 import { StatCard } from '@/components/ui/StatCard'
 import { EodStamp } from '@/components/ui/EodStamp'
+import Link from 'next/link'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Section } from '@/components/ui/Section'
 import { RsCell } from '@/components/countries/RsCell'
@@ -25,6 +26,19 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
 
   return (
     <div className="page">
+      {/* Up one level. A drill-down that only goes down makes the reader use the back button to
+          compare two themes in one sector, which is the cognitive load the board exists to remove. */}
+      {row.sector_id && row.sector_name && (
+        <nav className="mb-2 text-meta text-ink-3" aria-label="Breadcrumb">
+          <Link href="/sectors" className="hover:underline">
+            Sectors
+          </Link>
+          <span className="px-1.5">/</span>
+          <Link href={`/sectors#${encodeURIComponent(row.sector_id)}`} className="hover:underline">
+            {row.sector_name}
+          </Link>
+        </nav>
+      )}
       <PageHeader
         title={row.name}
         lead={
