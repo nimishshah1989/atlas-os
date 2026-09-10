@@ -339,20 +339,27 @@ const detailInner = eodCached(async (id: string): Promise<SectorDetail | null> =
       WHERE o.date = (SELECT d FROM d0) AND o.close_tr > 0
     ),
     spy0 AS (SELECT close_tr FROM cal WHERE date = (SELECT d FROM d0))
-    SELECT o.date::text,
+    -- DRIVEN FROM THE SMALL SETS, NOT FROM ohlcv_daily. This is the whole performance story and
+    -- my first attempt at it was wrong: filtering a 7.8-million-row table with a date bound that
+    -- is itself a subquery gives the planner a value it cannot estimate at plan time, so it scans
+    -- the table instead of using the key. Measured live: 16 to 52 seconds per cold sector.
+    --
+    -- ohlcv_daily is keyed (instrument_id, date). So the driving set is the ~150 member funds
+    -- CROSS JOIN the ~156 sampled sessions, and the join to the bar table is EXACT EQUALITY on
+    -- both key columns — about twenty thousand index probes, which is what that key is for.
+    SELECT c.date::text,
            -- ::numeric before ::text: percentile_cont returns DOUBLE PRECISION and postgres
            -- renders a small double in scientific notation, which the board's formatters refuse.
            (percentile_cont(0.5) WITHIN GROUP (ORDER BY o.close_tr / b.close_tr) * 100)
              ::numeric(12,4)::text                                                  AS index,
-           (max(cal.close_tr) / (SELECT close_tr FROM spy0) * 100)::numeric(12,4)::text AS spy
-    FROM atlas_global.ohlcv_daily o
-    JOIN base b ON b.instrument_id = o.instrument_id
-    JOIN cal ON cal.date = o.date
-    -- The lower bound is the point of this line: ohlcv_daily is keyed (instrument_id, date), and
-    -- without it the planner has no range to scan and reads every bar these funds ever had.
-    WHERE o.date >= (SELECT d FROM d0) AND o.close_tr > 0
-    GROUP BY o.date
-    ORDER BY o.date
+           (max(c.close_tr) / (SELECT close_tr FROM spy0) * 100)::numeric(12,4)::text AS spy
+    FROM base b
+    CROSS JOIN cal c
+    JOIN atlas_global.ohlcv_daily o
+      ON o.instrument_id = b.instrument_id AND o.date = c.date
+    WHERE o.close_tr > 0
+    GROUP BY c.date
+    ORDER BY c.date
   `
 
   const history: SectorPoint[] = points
