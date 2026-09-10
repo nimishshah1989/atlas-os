@@ -100,14 +100,15 @@ REPORT_COLUMNS = (
 
 ANCHOR_SQL = f"SELECT max(date) AS d FROM {M}.technical_daily WHERE date <= :cutoff"
 
-# The scored set: in-universe ETFs (the FM's cut — current members, above the ADV$ floor,
-# never geared or inverse) with a metric row on the anchor session and a classification to
-# group them by. An INNER join on the classification is deliberate: a fund we cannot group
-# cannot be ranked, and giving it a score with no peers to read it against would be worse
-# than leaving it out and saying so in the report.
+# The scored set: EVERY active classified ETF with a metric row on the anchor session. Liquidity
+# is not a gate here — it is a lens input (`cost_liquidity` scores ADV$ and AUM directly) and a
+# basket rule, which is where a floor belongs. An INNER join on the classification is deliberate:
+# a fund we cannot group cannot be ranked, and giving it a score with no peers to read it against
+# would be worse than leaving it out and saying so in the report.
 TARGETS_SQL = f"""
 SELECT im.instrument_id::text AS instrument_id, im.symbol, im.name,
-       c.asset_class, c.strategy,
+       c.asset_class, c.strategy, c.leveraged, c.inverse,
+       coalesce(u.in_universe, false) AS in_universe,
        t.ema_21, t.ema_50, t.ema_200, t.rsi_14, t.ret_1w, t.ret_6m,
        t.rs_3m_spy, t.rs_6m_spy, t.rs_12m_spy,
        t.vol_63d_ann, t.mdd_12m, t.downside_dev_63d, t.beta_spy_252,
@@ -116,10 +117,16 @@ SELECT im.instrument_id::text AS instrument_id, im.symbol, im.name,
        e.top10_w,
        o.close_adj AS price
 FROM {M}.instrument_master im
-JOIN {M}.universe_snapshot u
+-- LEFT, and with no `AND u.in_universe`: the universe is what a fund can be TRADED in, not what
+-- it may be measured. The FM, reversing the earlier cut: "we should score all the funds,
+-- irrespective… if we have the data for all those funds… that way we have coverage that is close
+-- to 100%." So `in_universe` rides along as an attribute — baskets and the board still read it —
+-- and the gate below is the only one left.
+LEFT JOIN {M}.universe_snapshot u
   ON u.instrument_id = im.instrument_id
  AND u.date = (SELECT max(date) FROM {M}.universe_snapshot)
- AND u.in_universe
+-- THE REAL GATE, and it always was: an INNER join on the metric row. A fund with no technicals on
+-- the anchor session cannot be scored by any lens, which is exactly the FM's own condition.
 JOIN {M}.etf_classification c
   ON c.instrument_id = im.instrument_id AND c.version = 1
 JOIN {M}.technical_daily t
@@ -189,7 +196,21 @@ def assign_groups(frame: pd.DataFrame, min_members: int) -> pd.DataFrame:
     asset group exists even when it is too small to rank in.
     """
     out = frame.copy()
-    out["asset_group"] = out["asset_class"].fillna("unclassified")
+    # GEARED AND INVERSE FUNDS ARE SCORED, AND RANKED ONLY AGAINST EACH OTHER.
+    #
+    # The FM opened the scoring gate: "we should score all the funds, irrespective… from a
+    # scoring point of view, we have coverage that is close to 100%." Scoring them is right.
+    # Ranking them TOGETHER is not. A 3x semiconductor fund's returns and relative strength are
+    # three times an unlevered one's BY CONSTRUCTION, and a bear fund's are the market's negated,
+    # so mixed into equity:thematic they top every column in one direction of market and bottom it
+    # in the other while telling nobody anything. The peer of a geared fund is another geared fund.
+    #
+    # It is the ASSET GROUP that changes, not a flag bolted onto the label — so the risk
+    # percentiles (`add_percentiles` cuts those within the asset group) are also cut among geared
+    # funds, which is the only population in which a 60 percent annualised volatility is ordinary.
+    geared = out["leveraged"].fillna(False).astype(bool) | out["inverse"].fillna(False).astype(bool)
+    plain_group = out["asset_class"].fillna("unclassified")
+    out["asset_group"] = ("geared:" + plain_group).where(geared, plain_group)
     narrow = out["asset_group"] + ":" + out["strategy"].fillna("unclassified")
     # A list comprehension, not Series.map(dict): pandas accepts a dict there but the type
     # stubs declare a callable, and the ratchet counts that as a new error every run.
