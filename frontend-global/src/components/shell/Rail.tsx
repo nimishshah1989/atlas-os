@@ -10,6 +10,7 @@ const SECTIONS: { href: string; label: string }[] = [
   // no separate Today section to link to until one has scored movement to show.
   { href: '/countries', label: 'Countries' },
   { href: '/pulse', label: 'Pulse' },
+  { href: '/sectors', label: 'Sectors' },
   { href: '/themes', label: 'Themes' },
   { href: '/etfs', label: 'ETFs' },
   { href: '/stocks', label: 'Stocks' },

@@ -40,7 +40,10 @@ const EMPTY: ThemeList = { date: null, rows: [] }
 // the anchor session. A fund in three themes counts in all three — it IS an AI fund and a
 // semiconductor fund, and dropping it from two of them to keep the counts tidy would be a lie
 // about what it holds.
-const MEMBERS = `
+// Exported because `queries/sectors.ts` rolls the SAME rows up one more level. Two surfaces
+// deriving membership from the same columns twice is how a fund ends up in a theme on one page
+// and out of it on the next.
+export const MEMBERS = `
   WITH anchor AS (SELECT max(date) AS d FROM atlas_global.etf_scores_daily),
   member AS (
     SELECT unnest(c.theme_ids)         AS theme_id,
