@@ -12,7 +12,8 @@ const sector = (id: string, name: string, composite: string | null, kids: number
   level: 'sector', id, name, symbol: null, n_children: kids, n_funds: kids, n_scored: kids,
   aum_usd: null, composite, above_ema200_frac: null,
   rs: { '3m': '0.05', '6m': null, '12m': null },
-  rank: null, n_ranked: 0, top_symbol: null, top_name: null, children: [],
+  rank: null, n_ranked: 0, top_symbol: null, top_name: null,
+  n_small: 0, n_geared: 0, n_young: 0, children: [],
 })
 
 const theme = (id: string, name: string, median: string | null, scored: number): ThemeRow => ({

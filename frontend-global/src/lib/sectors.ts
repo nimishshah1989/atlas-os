@@ -55,6 +55,16 @@ export type SectorNode = {
   /** The strongest scored fund anywhere under this node, for the "what would I buy" column. */
   top_symbol: string | null
   top_name: string | null
+  /** WHY the unscored funds under this node have no score, split three ways. They always sum to
+   *  `n_funds − n_scored`, because score_etfs.py grades exactly what `universe_snapshot` admits —
+   *  an unscored fund is an EXCLUDED fund, never one the scorer failed on.
+   *
+   *  Below the FM's liquidity floor: trades less than `liquidity_min_traded_value_usd` a day. */
+  n_small: number
+  /** Geared or inverse — deliberately never scored, and never basket-eligible. */
+  n_geared: number
+  /** Too young or too thin to measure: no bars, fewer than the minimum observations, or stale. */
+  n_young: number
   /** Children, already ranked. Empty at the leaf. */
   children: SectorNode[]
 }

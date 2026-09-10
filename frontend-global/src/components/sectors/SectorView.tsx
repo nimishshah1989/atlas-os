@@ -20,6 +20,7 @@ import { SECTOR_WINDOWS, type SectorDetail } from '@/lib/sectors'
 import { SectorHeatmap } from './SectorHeatmap'
 import { SectorStockTable } from './SectorStockTable'
 import { SectorTrend } from './SectorTrend'
+import { Unscored } from './Unscored'
 
 const WINDOW_LABEL: Record<(typeof SECTOR_WINDOWS)[number], string> = {
   '3m': '3 months',
@@ -112,6 +113,7 @@ export function SectorView({ detail }: { detail: SectorDetail }) {
           heading="Theme · fund"
           emptyNote="No theme under this sector has a classified fund yet."
         />
+        <Unscored node={node} />
       </Section>
 
       <Section title="S&P 500 members" note="filed under this sector by the SPDR holdings file">
