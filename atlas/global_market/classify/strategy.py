@@ -245,8 +245,13 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     ),
     (
         re.compile(
+            # `industrials?(?! average)` — "Dow Jones INDUSTRIAL Average" is the third-most
+            # quoted index in the world and this rule filed it as an industrials SECTOR bet,
+            # because `sector` is ordered above `broad_market` and the word is right there in
+            # the name. DIA then ranked against XLI and friends instead of against SPY. The
+            # lookahead is the whole fix: no sector fund is called "... Industrial Average".
             r"\b(?:technology|financials?|health ?care|energy|utilities|"
-            r"industrials?|materials|real estate|consumer discretionary|"
+            r"industrials?(?! average)|materials|real estate|consumer discretionary|"
             r"consumer staples|communication services|banks?|insurance|"
             r"biotech\w*|pharmaceutical|retail|transportation|aerospace|mining|"
             r"homebuilder|semiconductors?|software|internet|media|telecom\w*|"
@@ -333,7 +338,12 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     # with none of this vocabulary returns None and goes to the LLM, never silently here.
     (
         re.compile(
-            r"\b(?:total (?:stock )?market|broad market|s&p 500|"
+            # `total (u.s. )?(stock )?market` — the country word sits INSIDE the phrase on the
+            # biggest names: "iShares Core S&P Total U.S. Stock Market" (ITOT) matched nothing
+            # at all, because the pattern expected "total stock market" unbroken. A total-market
+            # tracker that the rules cannot read is not a small gap; it is the fallback bucket
+            # failing on the funds it exists for.
+            r"\b(?:total (?:u\.?s\.?\s+)?(?:stock )?market|broad market|s&p 500|"
             r"russell \d{4}|nasdaq-?100|dow jones industrial|"
             r"total market|core equity|equity index|market index|"
             r"\d{3,4} index)\b",

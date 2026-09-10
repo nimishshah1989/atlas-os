@@ -128,14 +128,40 @@ def is_currency_hedged(name: str) -> bool:
     return any(word in lowered for word in HEDGED_WORDS)
 
 
+# THE UNITED STATES IS THE ONE COUNTRY WHOSE FUNDS NEVER SAY ITS NAME (FM, 2026-09-10).
+#
+# The grid had 44 countries and no US row, and the reason is a nice piece of survivorship: every
+# foreign fund states its country in the title, because it is FOREIGN EXPOSURE SOLD TO AMERICANS
+# — "iShares MSCI Japan", "FTSE China", "MSCI India". The home market is the only one that never
+# names itself. SPY is "SPDR S&P 500 ETF Trust"; VTI is "Vanguard Total Stock Market ETF".
+# Neither says America, so a name-reading rule finds no country in them.
+#
+# `strategy.py` excluded the US from its `country` pattern deliberately, and that exclusion is
+# still right: matching "U.S." at face value would file the entire American core of the universe
+# as a country bet and leave `broad_market` holding nothing, which would scramble every peer
+# group and therefore every ranking. So this does NOT touch the strategy verdict.
+#
+# What it uses instead is that verdict, already computed. `country` and `region` are ordered
+# ABOVE `broad_market`, so anything naming a geography is claimed before the fallback is reached
+# — which makes `broad_market` the US home-market bucket by construction rather than by
+# assertion. Measured on the 5,655 real fund names in the directory snapshot: 74 funds classify
+# `broad_market` and NOT ONE carries a foreign geography word. SPY, VOO, IVV, VTI, IWM, ITOT,
+# DIA and the Russell trackers are all in it.
+#
+# The country view then treats the US exactly like Japan: `representative()` takes the
+# most-traded unlevered, unhedged member, which is SPY — the same rule, no special case.
+UNITED_STATES = Country("US", "United States", "north_america")
+
+
 def country_of(name: str) -> Country | None:
     """The country this fund's name is a bet on, or ``None`` when it names none.
 
     ``None`` is the answer for a region fund ("Emerging Markets"), a fund that EXCLUDES a
-    country ("Asia ex Japan"), a US fund — the classifier treats a US-listed fund's home
-    market as the default rather than a bet — and anything the pattern does not know.
+    country ("Asia ex Japan"), and anything the pattern does not know.
     """
     match = classify_strategy(name)
+    if match.strategy == "broad_market":
+        return UNITED_STATES
     if match.strategy != "country" or not match.evidence:
         return None
     return COUNTRIES.get(match.evidence.strip().lower())

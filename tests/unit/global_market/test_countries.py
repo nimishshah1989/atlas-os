@@ -14,10 +14,18 @@ from atlas.global_market.classify import strategy as st
 from atlas.global_market.classify.countries import (
     COUNTRIES,
     REGIONS,
+    UNITED_STATES,
     Country,
     country_of,
     is_currency_hedged,
 )
+
+
+@pytest.fixture
+def us() -> Country:
+    """The one country the classifier reaches through `broad_market` rather than by name."""
+    return UNITED_STATES
+
 
 pytestmark = pytest.mark.unit
 
@@ -43,12 +51,38 @@ def test_a_region_or_broad_fund_names_no_country() -> None:
     assert country_of("iShares Core MSCI EAFE ETF") is None
 
 
-def test_a_us_fund_is_not_a_country_bet() -> None:
-    """A US-listed fund's home market is the default, not a wager on it. Were it otherwise the
-    entire American core of the universe would file as `country: United States` and the grid
-    would be one enormous row (strategy.py's country rule says so; this holds it)."""
-    assert country_of("SPDR S&P 500 ETF Trust") is None
-    assert country_of("Vanguard Total Stock Market ETF") is None
+def test_a_us_broad_market_fund_is_the_united_states(us: Country) -> None:
+    """The US IS a country row (FM, 2026-09-10), and it reaches one without naming itself.
+
+    This test used to assert the opposite, and the reason it did is worth keeping: matching
+    "U.S." at face value in strategy.py's COUNTRY pattern would file the entire American core
+    of the universe as a country bet and leave `broad_market` empty, scrambling every peer
+    group. That is still true, and strategy.py is still untouched — the grid reads the
+    `broad_market` VERDICT instead, which the rule ordering makes US-only for free.
+    """
+    for name in (
+        "State Street SPDR S&P 500 ETF Trust",  # SPY — the representative, on liquidity
+        "Vanguard Morningstar Total Stock Market ETF",  # VTI
+        "iShares Core S&P 500 ETF",  # IVV
+        "iShares Core S&P Total U.S. Stock Market ETF",  # ITOT
+        "State Street SPDR Dow Jones Industrial Average ETF Trust",  # DIA
+    ):
+        assert country_of(name) == us, name
+
+
+def test_the_united_states_sits_in_north_america_beside_canada(us: Country) -> None:
+    assert us.iso2 == "US"
+    assert us.region == "north_america" == COUNTRIES["canada"].region
+
+
+def test_a_foreign_fund_is_still_its_own_country_not_the_us(us: Country) -> None:
+    """The guard on the branch above: `broad_market` is the FALLBACK, so a fund naming a
+    country or a region must be claimed before it — otherwise every foreign fund on the board
+    would quietly become American."""
+    japan = country_of("iShares MSCI Japan Index Fund")
+    assert japan is not None and japan.iso2 == "JP"
+    assert country_of("iShares MSCI India ETF") != us
+    assert country_of("Vanguard FTSE Emerging Markets ETF") is None
 
 
 def test_every_country_the_classifier_can_match_has_a_code() -> None:
