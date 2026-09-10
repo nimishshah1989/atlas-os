@@ -216,3 +216,26 @@ describe('the sector line and the theme line are the same query', () => {
     expect(builder).toContain('NOT coalesce(c.leveraged, false) AND NOT coalesce(c.inverse, false)')
   })
 })
+
+// ── the page sends what it shows ──────────────────────────────────────────────────────────────
+describe('the explorer ships the universe it opens on, not the whole directory', () => {
+  // MEASURED ON THE LIVE BOARD: /etfs was 2,627,901 bytes, of which the packed row array was
+  // 2,219,342 — 85% of the page — and it carried 5,659 funds to render the 1,749 the default view
+  // shows. The universe facet was already a URL parameter, so the server can read the same key the
+  // rail writes and send the set the reader asked for.
+  const source = (file: string) => sources().find((s) => s.file === file)?.text ?? ''
+
+  it('cuts BOTH list queries on the same parameter', () => {
+    // Both, or the ETF page gets fast and the stock page silently does not.
+    const cuts = source('scores.ts').match(/\(\$\{all\} OR coalesce\(u\.in_universe, false\)\)/g) ?? []
+    expect(cuts).toHaveLength(2)
+  })
+
+  it('passes the flag into the cache key rather than filtering after the fact', () => {
+    // eodCached keys on the arguments, so the narrow and the wide payloads are two entries. A
+    // filter applied to a shared cached result would make the first reader's view everyone's.
+    const text = source('scores.ts')
+    expect(text).toContain('const etfListInner = eodCached(async (all: boolean)')
+    expect(text).toContain('const stockListInner = eodCached(async (all: boolean)')
+  })
+})

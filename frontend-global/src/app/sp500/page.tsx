@@ -4,6 +4,10 @@ import { ExplorerPage } from '@/components/explorer/ExplorerPage'
 
 export const metadata = { title: 'Stocks' }
 
-export default function StocksPage() {
-  return <ExplorerPage assetClass="stock" />
+export default function StocksPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  return <ExplorerPage assetClass="stock" searchParams={searchParams} />
 }

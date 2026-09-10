@@ -3,6 +3,10 @@ import { ExplorerPage } from '@/components/explorer/ExplorerPage'
 
 export const metadata = { title: 'ETFs' }
 
-export default function EtfsPage() {
-  return <ExplorerPage assetClass="etf" />
+export default function EtfsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  return <ExplorerPage assetClass="etf" searchParams={searchParams} />
 }
