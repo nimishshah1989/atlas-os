@@ -60,6 +60,7 @@ def test_report_line_width_matches_the_columns() -> None:
             "region": ["asia_pacific"],
             "eligible": [True],
             "in_universe": [True],
+            "comparable": [True],
             "adv_usd_60d_median": [float("nan")],
             "composite": [float("nan")],
             **{c: [float("nan")] for c in bcv.RS_COLUMNS},
@@ -89,51 +90,51 @@ def test_the_two_status_words_are_distinct() -> None:
 # ── P2-E: the country ranking ────────────────────────────────────────────────
 
 
-def test_breadth_counts_only_the_funds_the_universe_offers() -> None:
-    """The two real Japan rows that made this test wrong, and then right.
+def test_breadth_drops_the_geared_and_keeps_everything_else() -> None:
+    """Four real Japan rows from the live board of 2026-09-09, and the two mistakes they caught.
 
-    ProShares UltraShort MSCI Japan scored 7.55 on the live board of 2026-09-09 and iShares MSCI
-    Japan scored 93.32. A bear fund is a bet AGAINST the market, so counting its low score as
-    evidence that Japan is weak is backwards — and that is what the old denominator did, because
-    it was "every fund carrying a composite" and score_etfs.py now grades everything.
+    ProShares UltraShort MSCI Japan scored 7.55 and iShares MSCI Japan 93.32. A bear fund is a bet
+    AGAINST the market, so counting its low score as evidence that Japan is weak is backwards —
+    which is what the original denominator did once score_etfs.py started grading everything.
+
+    MJSC, the MUFG Japan Small Cap fund, scored 47.32 and trades seven thousand dollars a day. It
+    is NOT the same case: it is an ordinary long Japan fund the FM cannot trade, and what it did is
+    still evidence about Japan. The correction after the first one cut it out too, and the FM
+    caught that: "the overall score of that healthcare sector is from the 12 ETFs that are there
+    and for which we have the data, right?"
     """
     group = pd.DataFrame(
         {
             "composite": [93.32, 70.54, 7.55, 47.32],
-            "in_universe": [True, True, False, False],
+            "comparable": [True, True, False, True],
         }
     )
-    n_offered, pct = bcv.breadth(group, Decimal("60"))
-    assert n_offered == 2, "the geared and below-floor funds are not in the denominator"
-    assert pct == 100.0, "both funds the FM can buy clear the cut"
+    n_comparable, pct = bcv.breadth(group, Decimal("60"))
+    assert n_comparable == 3, "the bear fund is out; the fund below the floor stays in"
+    assert pct == round(200 / 3, 2), "two of the three clear the cut"
 
 
-def test_a_fund_the_universe_offers_but_the_scorer_has_not_measured_is_not_counted() -> None:
-    """Offered and unscored is a real state — a fund that cleared the floor this week and has no
-    composite yet. It belongs in neither half of a percentage."""
+def test_a_comparable_fund_the_scorer_has_not_measured_is_not_counted() -> None:
+    """Comparable and unscored is a real state — a fund listed last week with no composite yet.
+    It belongs in neither half of a percentage."""
     group = pd.DataFrame(
-        {"composite": [72.0, 55.0, float("nan")], "in_universe": [True, True, True]}
+        {"composite": [72.0, 55.0, float("nan")], "comparable": [True, True, True]}
     )
-    n_offered, pct = bcv.breadth(group, Decimal("60"))
-    assert n_offered == 2
-    assert pct == 50.0
+    assert bcv.breadth(group, Decimal("60")) == (2, 50.0)
 
 
-def test_a_market_with_nothing_offered_has_no_breadth_rather_than_zero() -> None:
-    """Zero reads as 'measured, and every fund failed'. None is the truth: nothing to measure.
-
-    Seven markets are in exactly this state — Belgium, Denmark, Finland, Ireland, Kuwait, Norway
-    and Qatar are each covered only by funds below the FM's liquidity floor."""
-    below_floor = pd.DataFrame({"composite": [63.86], "in_universe": [False]})
-    assert bcv.breadth(below_floor, Decimal("60")) == (0, None)
-    unmeasured = pd.DataFrame({"composite": [float("nan")], "in_universe": [True]})
+def test_a_market_with_nothing_comparable_has_no_breadth_rather_than_zero() -> None:
+    """Zero reads as 'measured, and every fund failed'. None is the truth: nothing to measure."""
+    geared_only = pd.DataFrame({"composite": [68.00], "comparable": [False]})
+    assert bcv.breadth(geared_only, Decimal("60")) == (0, None)
+    unmeasured = pd.DataFrame({"composite": [float("nan")], "comparable": [True]})
     assert bcv.breadth(unmeasured, Decimal("60")) == (0, None)
 
 
 def test_the_cut_is_the_seeded_threshold_not_a_literal() -> None:
     """Both funds sit either side of the value the caller passes, so moving the seeded
     ``rollup_breadth_min`` moves the answer — which is the point of it being a table row."""
-    group = pd.DataFrame({"composite": [65.0, 55.0], "in_universe": [True, True]})
+    group = pd.DataFrame({"composite": [65.0, 55.0], "comparable": [True, True]})
     assert bcv.breadth(group, Decimal("60"))[1] == 50.0
     assert bcv.breadth(group, Decimal("50"))[1] == 100.0
     assert bcv.breadth(group, Decimal("70"))[1] == 0.0

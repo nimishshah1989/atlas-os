@@ -146,14 +146,29 @@ describe('a fund is ranked only among the funds the universe offers', () => {
     expect(source(file)).toContain(clause)
   })
 
-  it('cuts every roll-up figure over the offered members, not everything measured', () => {
-    // The offered count, the median, the three relative-strength medians, the above-EMA
-    // denominator and both halves of the headline fund — and a theme whose figures come from funds
-    // nobody can buy the moment any one of them goes.
+  it('cuts each roll-up figure over the population that answers ITS question', () => {
+    // TWO POPULATIONS, AND THIS TEST EXISTS BECAUSE ONE OF THEM ATE THE OTHER. The first version
+    // of this rule put every figure on in_universe, which fixed the -3x short ETN heading
+    // Semiconductors and then cut Health Care's median to four funds — eight of its twelve are
+    // under the liquidity floor and NOT ONE is geared. The FM: "the overall score of that
+    // healthcare sector is from the 12 ETFs that are there and for which we have the data,
+    // right?" Right. A fund he cannot trade still tells you what health care did; a 2x fund does
+    // not, because its return is a multiple of the thing by construction.
+    //
+    // So: DESCRIBE with `comparable` (everything graded but the geared and inverse), RECOMMEND
+    // with `in_universe` (what he can actually buy).
     const rollup = source('sectors.ts')
-    expect(rollup.match(/FILTER \(WHERE in_universe\)/g) ?? []).toHaveLength(8)
-    expect(rollup).toContain('count(above_ema_200) FILTER (WHERE in_universe)')
-    expect(rollup).toContain('above_ema_200 AND in_universe')
+
+    // in_universe: the buyable count, and both halves of the fund to own. Nothing else.
+    expect(rollup.match(/FILTER \(WHERE in_universe\)/g) ?? []).toHaveLength(3)
+    expect(rollup).toContain('FILTER (WHERE in_universe))[1]            AS top_symbol')
+    expect(rollup).toContain('FILTER (WHERE in_universe))[1]            AS top_name')
+
+    // comparable: the comparable count, the median, three relative strengths, the above-EMA
+    // denominator — and the numerator, which reads as a conjunction rather than a bare FILTER.
+    expect(rollup.match(/FILTER \(WHERE comparable\)/g) ?? []).toHaveLength(6)
+    expect(rollup).toContain('count(above_ema_200) FILTER (WHERE comparable)')
+    expect(rollup).toContain('above_ema_200 AND comparable')
   })
 
   it('has no ranking window it has not been told about', () => {

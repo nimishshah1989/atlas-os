@@ -72,26 +72,37 @@ const rollup = (src: string, key: string) => `
          count(*)                                     AS n_funds,
          count(composite)                             AS n_scored,
          count(*) FILTER (WHERE in_universe)          AS n_offered,
+         count(composite) FILTER (WHERE comparable)   AS n_comparable,
          sum(aum_usd)                                 AS aum_usd,
-         -- EVERY STATISTIC BELOW IS OVER THE OFFERED FUNDS, and that FILTER is the whole point of
-         -- this change. The board's headline fund for Semiconductors was SMHD — MicroSectors -3x
-         -- SHORT Semiconductor ETNs, top of the theme on a composite of 93.75 earned by the sector
-         -- falling — and for Artificial Intelligence it was COOL, which trades zero dollars a day.
-         -- Eight of thirty-two themes were headed by a fund the FM cannot buy, because the median
-         -- and the argmax were taken over everything MEASURED rather than everything OFFERED.
+         -- TWO POPULATIONS, TWO QUESTIONS, AND THE FM IS THE ONE WHO SEPARATED THEM.
+         --
+         -- What the sector IS DOING is a description, and it wants every fund whose score means
+         -- the same thing as every other fund's: COMPARABLE, which excludes only the geared and
+         -- inverse. What the FM SHOULD BUY is a recommendation, and it wants only funds he can
+         -- actually trade: in_universe.
+         --
+         -- The first cut of this took both over in_universe, which fixed the real defect (SMHD, a
+         -- -3x SHORT Semiconductor ETN, headed the Semiconductors theme on a composite of 93.75
+         -- earned by semis FALLING) and created a smaller one: Health Care's median dropped to
+         -- four funds because eight of its twelve are under the liquidity floor and NONE is
+         -- geared. The FM, reading the card: "the overall score of that healthcare sector is from
+         -- the 12 ETFs that are there and for which we have the data, right?" It should be, and
+         -- now is. A fund too small for him to trade still tells you what health care did.
          percentile_cont(0.5) WITHIN GROUP (ORDER BY composite)
-           FILTER (WHERE in_universe)::numeric(6,2)   AS composite,
+           FILTER (WHERE comparable)::numeric(6,2)    AS composite,
          percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_3m_spy)
-           FILTER (WHERE in_universe)::numeric        AS rs_3m,
+           FILTER (WHERE comparable)::numeric         AS rs_3m,
          percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_6m_spy)
-           FILTER (WHERE in_universe)::numeric        AS rs_6m,
+           FILTER (WHERE comparable)::numeric         AS rs_6m,
          percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_12m_spy)
-           FILTER (WHERE in_universe)::numeric        AS rs_12m,
-         -- count(x) is the MEASURED denominator: a theme whose offered funds are all too young for
-         -- a 200-day line is null here, not 0% (rule #0).
-         (count(*) FILTER (WHERE above_ema_200 AND in_universe)::numeric
-            / nullif(count(above_ema_200) FILTER (WHERE in_universe), 0))
+           FILTER (WHERE comparable)::numeric         AS rs_12m,
+         -- count(x) is the MEASURED denominator: a sector whose comparable funds are all too young
+         -- for a 200-day line is null here, not 0% (rule #0).
+         (count(*) FILTER (WHERE above_ema_200 AND comparable)::numeric
+            / nullif(count(above_ema_200) FILTER (WHERE comparable), 0))
                                                       AS above_ema200_frac,
+         -- THE ONE EXCEPTION, and it is the recommendation. "The fund to own" may never name one
+         -- the FM cannot buy, so this argmax alone stays on in_universe.
          (array_agg(symbol ORDER BY composite DESC NULLS LAST)
             FILTER (WHERE in_universe))[1]            AS top_symbol,
          (array_agg(name   ORDER BY composite DESC NULLS LAST)
@@ -115,6 +126,7 @@ type NodeDbRow = {
   n_funds: number
   n_scored: number
   n_offered: number
+  n_comparable: number
   aum_usd: string | null
   composite: string | null
   above_ema200_frac: string | null
@@ -142,7 +154,7 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
     , theme_key AS (SELECT DISTINCT tx_theme_id, theme_name, sector_id FROM scoped)
     SELECT 'sector'::text AS level, r.group_id AS id, NULL::text AS parent_id,
            sec.name, NULL::text AS symbol,
-           r.n_funds, r.n_scored, r.n_offered, r.aum_usd::text, r.composite::text,
+           r.n_funds, r.n_scored, r.n_offered, r.n_comparable, r.aum_usd::text, r.composite::text,
            r.rs_3m::text, r.rs_6m::text, r.rs_12m::text, r.above_ema200_frac::text,
            CASE WHEN r.composite IS NOT NULL
                 THEN RANK() OVER (ORDER BY r.composite DESC NULLS LAST) END      AS rank,
@@ -153,7 +165,7 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
 
     UNION ALL
     SELECT 'theme', r.group_id, k.sector_id, k.theme_name, NULL,
-           r.n_funds, r.n_scored, r.n_offered, r.aum_usd::text, r.composite::text,
+           r.n_funds, r.n_scored, r.n_offered, r.n_comparable, r.aum_usd::text, r.composite::text,
            r.rs_3m::text, r.rs_6m::text, r.rs_12m::text, r.above_ema200_frac::text,
            CASE WHEN r.composite IS NOT NULL
                 THEN RANK() OVER (PARTITION BY k.sector_id ORDER BY r.composite DESC NULLS LAST) END,
@@ -166,7 +178,8 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
     -- readable in the same header: above_ema200_frac is 1 or 0 for ONE fund, and the median of
     -- those same ones and zeros for the node above it.
     SELECT 'fund', s.symbol, s.tx_theme_id, s.name, s.symbol,
-           1, (s.composite IS NOT NULL)::int, s.in_universe::int, s.aum_usd::text, s.composite::text,
+           1, (s.composite IS NOT NULL)::int, s.in_universe::int,
+           (s.composite IS NOT NULL AND s.comparable)::int, s.aum_usd::text, s.composite::text,
            s.rs_3m_spy::text, s.rs_6m_spy::text, s.rs_12m_spy::text,
            s.above_ema_200::int::text,
            -- Ranked among the OFFERED funds of its theme, and NULL when it is not one of them:
@@ -203,6 +216,7 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
     n_funds: Number(r.n_funds),
     n_scored: Number(r.n_scored),
     n_offered: Number(r.n_offered),
+    n_comparable: Number(r.n_comparable),
     aum_usd: r.aum_usd,
     composite: r.composite,
     above_ema200_frac: r.above_ema200_frac,

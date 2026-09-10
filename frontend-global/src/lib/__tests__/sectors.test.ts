@@ -28,6 +28,7 @@ const node = (
   n_funds: 1,
   n_scored: composite == null ? 0 : 1,
   n_offered: composite == null ? 0 : 1,
+  n_comparable: composite == null ? 0 : 1,
   aum_usd: null,
   composite,
   above_ema200_frac: null,
@@ -162,11 +163,23 @@ describe('the fraction column says what the fraction counts', () => {
     'utf8',
   )
 
-  it('renders n_offered under a heading that says buyable, never scored', () => {
+  it('renders both populations, each under its own heading', () => {
+    // The FM, once the single column was labelled honestly: "viable is 4 out of 12, and score is
+    // 12 out of 12. We should show both numbers in the table." Two populations answer two
+    // questions — what he could trade, and what the score was measured over — and collapsing them
+    // into one column is what made the first version unreadable whichever word sat on top of it.
     expect(heatmap).toContain('${node.n_offered}/${node.n_funds}')
-    expect(heatmap).toContain('Buyable')
-    // The word may still appear in the tooltip, which explains BOTH numbers. It may not be the
-    // heading, which is the only part most readers ever see.
-    expect(heatmap).not.toMatch(/^\s*Scored\{' '\}/m)
+    expect(heatmap).toContain('${node.n_comparable}/${node.n_funds}')
+    expect(heatmap).toMatch(/Buyable\{' '\}/)
+    expect(heatmap).toMatch(/Scored\{' '\}/)
+  })
+
+  it('keeps the two headings in the order the two cells are rendered', () => {
+    // A column whose heading has drifted onto its neighbour's numbers is the same defect as a
+    // heading that has drifted off its own, and it reads identically to a broken pipeline.
+    const cellOrder = heatmap.indexOf('${node.n_offered}/${node.n_funds}') <
+      heatmap.indexOf('${node.n_comparable}/${node.n_funds}')
+    const headOrder = heatmap.search(/Buyable\{' '\}/) < heatmap.search(/Scored\{' '\}/)
+    expect(cellOrder).toBe(headOrder)
   })
 })

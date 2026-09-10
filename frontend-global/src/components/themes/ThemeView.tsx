@@ -45,7 +45,7 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
         lead={
           row.n_offered === 0
             ? 'No fund carrying this theme is one you can buy — every one is geared, inverse or below your liquidity floor.'
-            : `${row.n_offered} of the ${row.n_funds} funds carrying this theme clear your universe rules, and are ranked against each other below.`
+            : `${row.n_offered} of the ${row.n_funds} funds carrying this theme are ones you can buy, and are ranked against each other below. The score is over the ${row.n_comparable} whose grades are comparable.`
         }
         aside={<EodStamp eod={date} asOf={date} />}
       />
@@ -54,12 +54,12 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
         <StatCard
           label="Median score"
           value={median == null ? '—' : median.toFixed(0)}
-          sub={`over ${row.n_offered} ${row.n_offered === 1 ? 'fund' : 'funds'} you can buy`}
+          sub={`median of ${row.n_comparable} comparable ${row.n_comparable === 1 ? 'fund' : 'funds'}`}
         />
         <StatCard
           label="Above 200-day"
           value={row.above_ema200_frac == null ? '—' : formatPct(row.above_ema200_frac, 0)}
-          sub="of those, trading above their own EMA-200"
+          sub={`of those ${row.n_comparable}, above their own EMA-200`}
         />
         <StatCard label="Funds" value={row.n_funds} sub={row.sector_name ?? 'unparented'} />
         <StatCard

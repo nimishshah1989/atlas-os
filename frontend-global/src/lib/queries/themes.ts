@@ -60,6 +60,15 @@ export const MEMBERS = `
            -- population every ranking, median and headline pick on the theme and sector surfaces
            -- is cut over. exclusion_reason says which rule left it out.
            coalesce(u.in_universe, false) AS in_universe,
+           -- COMPARABLE is a different question from BUYABLE, and conflating them was a mistake.
+           -- A geared or inverse fund's return is a multiple or a negation of the thing, so its
+           -- score cannot sit in the same median as a plain fund's — that is what put a -3x short
+           -- ETN at the top of Semiconductors. A fund UNDER THE LIQUIDITY FLOOR has no such
+           -- problem: it is a perfectly ordinary fund the FM happens not to be able to trade, and
+           -- its trend is still evidence about the sector. Health Care has twelve funds, eight of
+           -- them below the floor and NOT ONE geared — cutting the median to four threw away two
+           -- thirds of the evidence to protect against a danger that was not there.
+           (NOT coalesce(c.leveraged, false) AND NOT coalesce(c.inverse, false)) AS comparable,
            u.exclusion_reason
     FROM atlas_global.etf_classification c
     JOIN atlas_global.instrument_master im USING (instrument_id)
@@ -87,6 +96,7 @@ type ThemeDbRow = {
   n_funds: number | null
   n_scored: number | null
   n_offered: number | null
+  n_comparable: number | null
   aum_usd: string | null
   median_composite: string | null
   above_ema200_frac: string | null
@@ -141,27 +151,30 @@ const listInner = eodCached(async (): Promise<ThemeList> => {
            count(m.instrument_id)                                  AS n_funds,
            count(m.composite)                                      AS n_scored,
            count(*) FILTER (WHERE m.in_universe)                    AS n_offered,
+           count(m.composite) FILTER (WHERE m.comparable)           AS n_comparable,
            sum(m.aum_usd)::text                                    AS aum_usd,
            -- ::numeric before ::text on every one of these: see the note in pulse.ts. A double
            -- rendered as "5e-17" is what a percentile between two near-equal returns produces,
            -- and the board's formatters refuse that string by design.
-           -- OVER THE OFFERED MEMBERS. A theme's median is what its buyable funds are doing:
-           -- including a -3x bear ETN or a fund trading seven thousand dollars a day describes a
-           -- theme nobody can hold. Quantum Computing's median read 22.7 with the geared funds in
-           -- and 39.7 without them — a seventeen-point difference on a card the FM ranks by.
+           -- OVER THE COMPARABLE MEMBERS — every fund whose score means the same thing as every
+           -- other's, which excludes the geared and the inverse and nothing else. Quantum
+           -- Computing's median read 22.7 with the geared funds in and 39.7 without them, a
+           -- seventeen-point difference on a card the FM ranks by. Cutting it further to the
+           -- BUYABLE funds is a separate mistake: a fund under his floor is an ordinary fund he
+           -- cannot trade, and its trend is still evidence about the theme.
            percentile_cont(0.5) WITHIN GROUP (ORDER BY m.composite)
-             FILTER (WHERE m.in_universe)::numeric(6,2)::text      AS median_composite,
+             FILTER (WHERE m.comparable)::numeric(6,2)::text       AS median_composite,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_3m_spy)
-             FILTER (WHERE m.in_universe)::numeric::text           AS rs_3m,
+             FILTER (WHERE m.comparable)::numeric::text            AS rs_3m,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_6m_spy)
-             FILTER (WHERE m.in_universe)::numeric::text           AS rs_6m,
+             FILTER (WHERE m.comparable)::numeric::text            AS rs_6m,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_12m_spy)
-             FILTER (WHERE m.in_universe)::numeric::text           AS rs_12m,
-           -- share of MEASURED offered members above their own 200-day EMA: count(x) is the
+             FILTER (WHERE m.comparable)::numeric::text            AS rs_12m,
+           -- share of MEASURED comparable members above their own 200-day EMA: count(x) is the
            -- measured denominator, so a theme whose members are too young for a 200-day line is
            -- null rather than 0% (rule #0).
-           (count(*) FILTER (WHERE m.above_ema_200 AND m.in_universe)::numeric
-              / nullif(count(m.above_ema_200) FILTER (WHERE m.in_universe), 0))::text
+           (count(*) FILTER (WHERE m.above_ema_200 AND m.comparable)::numeric
+              / nullif(count(m.above_ema_200) FILTER (WHERE m.comparable), 0))::text
                                                                    AS above_ema200_frac,
            lead.symbol                                             AS top_symbol,
            lead.name                                               AS top_name,
@@ -195,6 +208,7 @@ const listInner = eodCached(async (): Promise<ThemeList> => {
       n_funds: r.n_funds ?? 0,
       n_scored: r.n_scored ?? 0,
       n_offered: r.n_offered ?? 0,
+      n_comparable: r.n_comparable ?? 0,
       aum_usd: r.aum_usd,
       median_composite: r.median_composite,
       above_ema200_frac: r.above_ema200_frac,
