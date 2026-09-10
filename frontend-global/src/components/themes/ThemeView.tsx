@@ -72,7 +72,7 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
           value={row.top_symbol ?? '—'}
           colour={decileColour(row.top_decile)}
           href={row.top_symbol ? `/etfs/${encodeURIComponent(row.top_symbol)}` : undefined}
-          sub={top == null ? 'nothing scored yet' : `${row.top_name} · ${top.toFixed(0)}`}
+          sub={top == null ? 'nothing buyable yet' : `${row.top_name} · ${top.toFixed(0)}`}
         />
       </div>
 

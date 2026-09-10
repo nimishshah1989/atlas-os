@@ -98,7 +98,7 @@ export function ThemeFundTable({ funds, showDecile }: { funds: ThemeFund[]; show
                 </td>
                 {showDecile && (
                   <td className="px-2 py-2">
-                    <DecileMeter decile={f.decile} title="Within this theme's scored funds" />
+                    <DecileMeter decile={f.decile} title="Within this theme's buyable funds" />
                   </td>
                 )}
                 <td className="px-3 py-2 text-right text-table num text-ink-2">{lens(f.technical)}</td>

@@ -115,7 +115,7 @@ function ScoreCell({ node, span }: { node: SectorNode; span: { best: number; wor
         {formatDecimal(node.composite, 1)}
       </span>
       {node.rank != null && (
-        <span className="w-[42px] text-right text-[11px] text-ink-3" title={`${node.rank} of ${node.n_ranked} scored, ranked among its siblings`}>
+        <span className="w-[42px] text-right text-[11px] text-ink-3" title={`${node.rank} of ${node.n_ranked} buyable, ranked among its siblings`}>
           {node.rank}/{node.n_ranked}
         </span>
       )}
@@ -350,24 +350,30 @@ export function SectorHeatmap({
             <tr className="bg-raised">
               <th style={{ ...L, paddingLeft: 8 }}>{heading}</th>
               <th style={R}>
-                Scored{' '}
-                <InfoTip title="Scored of classified">
-                  The second number is every fund the classifier put here; the first is how many of
-                  them the scorer could grade. Every median on the row is over the first.
+                Buyable{' '}
+                <InfoTip title="Buyable, of every fund classified here">
+                  The second number is every fund the classifier put here. The first is how many of
+                  them clear YOUR universe rules — above the liquidity floor, not geared, not
+                  inverse, with enough history to measure. Every figure on the row, the score and
+                  the best fund included, is over that first number: a page that answers &ldquo;which
+                  fund do I buy&rdquo; may not answer with one you cannot. The rest are still
+                  measured and still open from the fund board; they just take no part in a ranking.
+                  Lower the floor on the admin panel and more of them become buyable.
                 </InfoTip>
               </th>
               <th style={R}>
                 Score{' '}
                 <InfoTip title="The median member, and its rank">
-                  The MEDIAN composite of the group&apos;s scored funds — never a mean, so one giant
-                  fund cannot carry a theme. The shade is cut against the other rows at the same
-                  level, and the rank beside it names that population.
+                  The MEDIAN composite of the buyable funds in the group — never a mean, so one
+                  giant fund cannot carry a theme, and never over funds you could not act on. The
+                  shade is cut against the other rows at the same level, and the rank beside it
+                  names that population.
                 </InfoTip>
               </th>
               <th style={R}>
                 Breadth{' '}
                 <InfoTip title="How many members are actually rising">
-                  Share of the group&apos;s funds trading above their own 200-day average. The
+                  Share of the group&apos;s BUYABLE funds trading above their own 200-day average. The
                   hairline in the bar is HALF — right of it, more members are rising than falling.
                   Funds too young for a 200-day line are left out of both sides of the fraction.
                 </InfoTip>
