@@ -17,6 +17,8 @@ import type { ScoreDetail } from '@/lib/queries/scores'
 
 const DEGENERATE: ScoreDetail = {
   scored_on: '2026-09-03',
+  // Every lens in this fixture is null, so no lens carries a decile — the real shape, not a gap.
+  deciles: {},
   values: { composite: null, technical: null, risk: null, cost_liquidity: null, flow: null, quality: null },
   conviction_tier: 'BELOW_THRESHOLD',
   peer_group: 'equity:broad_market',

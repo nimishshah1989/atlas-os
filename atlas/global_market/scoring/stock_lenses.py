@@ -309,7 +309,15 @@ def score_fundamental(
         gross_margin=None,
         revenue_ttm=None,
         eps_diluted_ttm=None,
-        thresholds=india_thresholds(th, FUNDAMENTAL_KEYS),
+        # REACHABLE_KEYS, not FUNDAMENTAL_KEYS. The three `bs_qr_*` rungs grade a QUICK ratio,
+        # which needs inventory `stock_financials_pit` does not carry — `quick_ratio` above is
+        # always None — so India's `_balance_sheet` guards on it and never reads them. Indexing
+        # them anyway made the scorer demand three rows the gate had already stopped requiring,
+        # and score_stocks died on `KeyError: 'bs_qr_good'` at the first company of every run
+        # while the gate reported the table complete. Two halves of one decision; this is the
+        # other half. Every key that IS read is still indexed, so a missing one still fails by
+        # name rather than falling back to India's number for this index.
+        thresholds=india_thresholds(th, REACHABLE_KEYS),
     )
     subs: dict[str, Decimal | None] = {
         column: getattr(result, attribute) for column, attribute in FUNDAMENTAL_SUBS

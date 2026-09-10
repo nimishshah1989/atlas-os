@@ -129,7 +129,12 @@ CREATE TABLE IF NOT EXISTS atlas_global.short_interest (
     settlement_date   date          NOT NULL,
     short_interest    bigint,
     avg_daily_volume  bigint,
-    days_to_cover     numeric(12,4),
+    -- UNCONSTRAINED PRECISION, both here and on change_percent below. numeric(12,4) caps at
+    -- 10^8, and both of these are RATIOS whose denominator can be near zero: days to cover is
+    -- short interest over average daily volume, and a fortnight in which a name barely traded
+    -- makes it enormous. A cap does not make the figure smaller; it makes the whole settlement
+    -- fail to write with `numeric field overflow`, which is what happened on the first real run.
+    days_to_cover     numeric,
     source            text          NOT NULL DEFAULT 'finra',
     ingested_at       timestamptz   NOT NULL DEFAULT now(),
     CONSTRAINT short_interest_pkey PRIMARY KEY (instrument_id, settlement_date)
@@ -142,7 +147,14 @@ CREATE TABLE IF NOT EXISTS atlas_global.short_interest (
 -- counts incomparable and the change percent across one is meaningless; revision_flag marks a
 -- settlement FINRA restated after publication, which is a different fact from the original.
 ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS previous_short_interest bigint;
-ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS change_percent          numeric(12,4);
+ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS change_percent          numeric;
+-- A settlement written before this file widened them keeps the old type, so say so explicitly.
+-- FINRA's change percent is unbounded by construction: a position going from a hundred shares to
+-- ten million is a real nine-million-per-cent rise, and refusing to store it loses the whole
+-- settlement — 22,500 rows — rather than the one figure. FINRA's own arithmetic, as published.
+-- (No per-cent SIGN anywhere in this file: psycopg2 reads one as a parameter marker.)
+ALTER TABLE atlas_global.short_interest ALTER COLUMN change_percent TYPE numeric;
+ALTER TABLE atlas_global.short_interest ALTER COLUMN days_to_cover  TYPE numeric;
 ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS split_flag              boolean;
 ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS revision_flag           boolean;
 

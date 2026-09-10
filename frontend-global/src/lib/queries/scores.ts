@@ -211,6 +211,9 @@ export type ScoreDetail = {
   /** The session the score is from — not necessarily the price EOD; the page prints both. */
   scored_on: string
   values: Record<string, string | null>
+  /** Lens name → its decile within the cohort, cut on read. Absent for a lens with no score, and
+   *  for every lens on an instrument whose cohort is too small to rank. */
+  deciles: Record<string, number | null>
   conviction_tier: string | null
   peer_group: string | null
   lenses_active: number | null
@@ -242,6 +245,33 @@ export type Classification = {
 
 type ScoreRow = Record<string, unknown>
 
+// A DECILE PER LENS, cut ON READ inside the same cohort the composite's decile is cut in — India's
+// `getStockDecile` does exactly this (frontend/src/lib/queries/stock_lens.ts) and the ladder reads
+// the same shape on both boards. It is a query, not a scorer change: nothing is stored, because a
+// decile is a statement about a population on one date and materialising it would let a fund's
+// standing go stale while its score moved (scripts/foundation/decile_core.py's rule).
+//
+// `PARTITION BY … , (lens IS NULL)` is India's, and it matters: it puts the rows that lens could
+// not score into a partition of their own, so an absent measurement never dilutes the ranking of
+// the funds it DID measure. The CASE then nulls those rows out — an unmeasured lens has no decile,
+// never a low one (rule #0).
+export function lensDeciles(lenses: readonly string[], cohort: 'peer_group' | 'cap_cohort'): string {
+  // An ETF whose asset class is too small to rank gets peer_group = NULL from score_etfs; it is
+  // scored and shown, and it carries no decile for anything.
+  const unranked = cohort === 'peer_group' ? ' OR s.peer_group IS NULL' : ''
+  return lenses
+    .map(
+      (l) => `CASE WHEN s.${l} IS NULL${unranked} THEN NULL ELSE
+             ntile(10) OVER (PARTITION BY s.date, s.${cohort}, (s.${l} IS NULL) ORDER BY s.${l})
+           END AS ${l}_decile`,
+    )
+    .join(',\n           ')
+}
+
+/** The lens columns each journal carries, in blend order. They ARE the column names. */
+export const ETF_LENSES = ['technical', 'risk', 'cost_liquidity', 'flow', 'quality'] as const
+export const STOCK_LENSES = ['technical', 'fundamental', 'valuation', 'catalyst', 'flow'] as const
+
 const etfScoreRow = (symbol: string) => db()<ScoreRow[]>`
   ${db().unsafe(ANCHOR)},
   scored_on AS (
@@ -253,6 +283,7 @@ const etfScoreRow = (symbol: string) => db()<ScoreRow[]>`
     -- because ntile(10) over six rows would print "decile 6 of 10" for sixth of six.
   ranked AS (
     SELECT s.*, s.peer_group AS cohort,
+           ${db().unsafe(lensDeciles(ETF_LENSES, 'peer_group'))},
            CASE WHEN s.composite IS NULL OR s.peer_group IS NULL THEN NULL ELSE
              ntile(10) OVER (PARTITION BY s.date, s.peer_group, (s.composite IS NULL)
                              ORDER BY s.composite)
@@ -281,6 +312,7 @@ const stockScoreRow = (symbol: string) => db()<ScoreRow[]>`
   ),
   ranked AS (
     SELECT s.*, s.cap_cohort AS cohort,
+           ${db().unsafe(lensDeciles(STOCK_LENSES, 'cap_cohort'))},
            CASE WHEN s.composite IS NULL THEN NULL ELSE
              ntile(10) OVER (PARTITION BY s.date, s.cap_cohort, (s.composite IS NULL)
                              ORDER BY s.composite)
@@ -314,12 +346,19 @@ const scoreDetailInner = eodCached(async (assetClass: AssetClass, symbol: string
   const row = rows[0]
   if (!row) return null
   const values: Record<string, string | null> = {}
+  // `ntile()` answers an integer, so the per-lens deciles arrive as NUMBERS while every score
+  // arrives as text (a NUMERIC is selected as text so it never passes through a double). They are
+  // kept apart rather than stringified into `values`, so nothing downstream can read a decile of 7
+  // where it expected a score of 7.
+  const deciles: Record<string, number | null> = {}
   for (const [k, v] of Object.entries(row)) {
-    if (typeof v === 'string' || v === null) values[k] = v
+    if (k.endsWith('_decile')) deciles[k.slice(0, -'_decile'.length)] = count(v)
+    else if (typeof v === 'string' || v === null) values[k] = v
   }
   return {
     scored_on: String(row.scored_on),
     values,
+    deciles,
     conviction_tier: (row.conviction_tier as string | null) ?? null,
     peer_group: (row.cohort as string | null) ?? null,
     lenses_active: count(row.lenses_active),

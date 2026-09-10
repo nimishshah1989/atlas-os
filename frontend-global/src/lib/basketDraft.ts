@@ -149,6 +149,41 @@ export function microToPct(micro: number): string {
   return frac ? `${whole}.${frac}` : String(whole)
 }
 
+/** Equal weights for `n` names, in micro-fractions, summing to EXACTLY 1,000,000.
+ *
+ *  Three names cannot be weighted equally in a fixed-point world: 333,333 × 3 is 999,999 and the
+ *  basket is a micro-fraction short of itself, which the Σ=1 trigger on `basket_constituents`
+ *  refuses outright. So the remainder is given to the FIRST row rather than dropped or spread —
+ *  one name carries 33.3334% and the arithmetic closes. Which row gets it is arbitrary and
+ *  therefore stated: the first, because a seeded basket arrives strongest-first and the extra
+ *  micro-fraction belongs on the name the FM already ranked highest.
+ *
+ *  These are a STARTING POINT the FM edits, not a recommendation. Equal weight says nothing about
+ *  conviction; it says "I have not decided yet", which is the honest state of a basket that was
+ *  seeded from a list one click ago. */
+export function equalWeights(n: number): number[] {
+  if (n <= 0) return []
+  const each = Math.floor(MICRO / n)
+  const weights = Array.from({ length: n }, () => each)
+  weights[0] += MICRO - each * n
+  return weights
+}
+
+/** A comma-separated `?symbols=` list → the builder's rows, equal-weighted and de-duplicated.
+ *  Anything that is not a plausible symbol is dropped rather than carried into the form as a row
+ *  the action will only refuse later. */
+export function seedRows(param: string | null | undefined, limit = 50): { symbol: string; weightPct: string }[] {
+  const symbols = [
+    ...new Set(
+      (param ?? '')
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => SYMBOL_RE.test(s)),
+    ),
+  ].slice(0, limit)
+  return equalWeights(symbols.length).map((w, i) => ({ symbol: symbols[i], weightPct: microToPct(w) }))
+}
+
 /** The draft against what instrument_master says: every symbol must resolve to ONE active
  *  instrument of the basket's kind. A non-fractionable name is allowed with a note — the
  *  book is paper, and `fractional_ready` is a flag in the plan, not a refusal. */

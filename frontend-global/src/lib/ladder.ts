@@ -3,9 +3,14 @@
 //
 // RULE #0. Nothing is computed here that the scorer did not already write. Every value traces to
 // a column of `lens_scores_daily` / `etf_scores_daily` or to that row's own evidence JSONB; an
-// absent column comes out as null and is rendered as words, never as a zero. In particular there
-// is NO per-lens decile: the journals hold none, so the ladder shows the 0–100 score the scorer
-// wrote and the header carries the one decile that is real, the composite's.
+// absent column comes out as null and is rendered as words, never as a zero.
+//
+// THE PER-LENS DECILE IS CUT ON READ, not stored — `<lens>_decile` on the score row, an ntile(10)
+// inside the same cohort the composite's decile is cut in (src/lib/queries/scores.ts), which is
+// exactly how India's `getStockDecile` produces the deciles its own ladder shows. So the number is
+// as real as the composite's: a statement about a population on one date, computed from the
+// journal, never materialised. A lens the scorer could not compute has no decile at all — an empty
+// track and the words, never a low one (rule #0).
 import type { LadderLens, LadderNumber } from '@/components/ui/DecileLadder'
 import type { AssetClass } from '@/lib/facts'
 import { formatNum } from '@/lib/format'
@@ -21,6 +26,13 @@ export const SUB_MAX = 25
 /** NUMERIC arrives as text; an empty string is postgres's null through the same door. */
 const score = (v: string | null | undefined): number | null =>
   v == null || v === '' ? null : Number(v)
+
+/** A decile is an integer 1-10 or nothing. Anything else — a 0 from a bad cut, a value off the
+ *  scale — is refused rather than clamped, because a clamped decile is a claim nobody computed. */
+function decileOf(n: number | null | undefined): number | null {
+  if (n == null || !Number.isInteger(n) || n < 1 || n > 10) return null
+  return n
+}
 
 /** Widest weight first, the query's own `ORDER BY threshold_value DESC, threshold_key`, repeated
  *  here so the ladder reads "this is what the score is mostly made of" whoever hands it the list. */
@@ -63,6 +75,9 @@ export function scoreToLadder(assetClass: AssetClass, s: ScoreDetail): LadderLen
     key: l.key,
     label: lensLabel(l.key),
     score: score(s.values[l.key]),
+    // `<lens>_decile` arrives beside the lens itself. Null where that lens has no score, and null
+    // for every lens on a fund whose asset class is too small to rank at all.
+    decile: decileOf(s.deciles[l.key]),
     weight: l.weight,
     numbers: numbersFor(assetClass, l.key, s.values),
     evidence: evidenceFor(s.evidence, l.key),

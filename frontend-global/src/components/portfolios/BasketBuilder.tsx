@@ -25,11 +25,32 @@ const MICRO = 1_000_000
 let seq = 1
 const blank = (): Row => ({ id: seq++, symbol: '', weightPct: '' })
 
-export function BasketBuilder({ limits, session }: { limits: BuilderLimits; session: string | null }) {
+export function BasketBuilder({
+  limits,
+  session,
+  seed,
+  seedName,
+}: {
+  limits: BuilderLimits
+  session: string | null
+  /** Rows the page arrived with — a theme's funds, a market's funds — equal-weighted. A STARTING
+   *  POINT, not a recommendation: equal weight says "I have not decided yet", which is the honest
+   *  state of a basket seeded from a list one click ago. */
+  seed?: { symbol: string; weightPct: string }[]
+  /** A name the page arrived with, so a basket built from Water opens called "Water". */
+  seedName?: string
+}) {
   const initial: FormState = {
     errors: [],
     notes: [],
-    values: { name: '', kind: KINDS[0], capital: limits.defaultCapital, rows: [] },
+    values: {
+      name: seedName ?? '',
+      kind: KINDS[0],
+      capital: limits.defaultCapital,
+      // A refused submit hands back what was typed, and THAT must win over the link's seed —
+      // otherwise correcting one weight would silently reset every other row to equal.
+      rows: seed ?? [],
+    },
   }
   const [state, formAction, pending] = useActionState(createBasket, initial)
   const [values, setValues] = useState<Omit<DraftInput, 'rows'>>({
