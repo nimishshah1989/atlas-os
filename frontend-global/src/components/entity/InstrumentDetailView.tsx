@@ -15,6 +15,7 @@ import { BarsProvenance } from './BarsProvenance'
 import { ClassificationCard } from './ClassificationCard'
 import { EntityHeader } from './EntityHeader'
 import { FactList, type Fact } from './FactList'
+import { HistorySection } from './HistorySection'
 import { HoldingsSection } from './HoldingsSection'
 import { MembershipTimeline } from './MembershipTimeline'
 import { PriceSection } from './PriceSection'
@@ -123,6 +124,7 @@ export function InstrumentDetailView({
 
       <PriceSection series={series} symbol={f.symbol} />
       <StrengthSection technical={series.technical} symbol={f.symbol} />
+      <HistorySection series={series} symbol={f.symbol} />
       <ReturnCalculator series={series} symbol={f.symbol} />
 
       <div className="detail">
