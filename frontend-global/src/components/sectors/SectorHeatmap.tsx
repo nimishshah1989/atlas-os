@@ -360,23 +360,18 @@ export function SectorHeatmap({
               <th style={R}>
                 Buyable{' '}
                 <InfoTip title="What you could actually trade">
-                  The second number is every fund the classifier put here; the first is how many
-                  clear YOUR universe rules — above the liquidity floor, not geared, not inverse,
-                  with enough history to measure. The RANKING and the fund to own come from these,
-                  because a page that answers &ldquo;which fund do I buy&rdquo; may not answer with
-                  one you cannot. Lower the floor on the admin panel and more become buyable.
+                  Of every fund classified here, how many clear your universe rules: above the
+                  liquidity floor, not geared, not inverse. The ranking and the fund to own come
+                  from these. Lower the floor on the admin panel and more qualify.
                 </InfoTip>
               </th>
               <th style={R}>
                 Scored{' '}
                 <InfoTip title="What the score is measured over">
-                  How many of the same funds carry a score that can share a median: everything the
-                  scorer graded EXCEPT the geared and the inverse, whose returns are a multiple or a
-                  negation of the thing and would poison the median — that is how a -3x short ETN
-                  came to head Semiconductors. A fund under your liquidity floor is not excluded
-                  here: it is an ordinary fund you happen not to be able to trade, and what it did
-                  is still evidence about the sector. The Score, the relative strengths and the
-                  Breadth on the row are all over this number.
+                  Everything the scorer graded except geared and inverse funds, whose returns are a
+                  multiple or a negation of the thing and cannot share a median. Funds below your
+                  floor stay in: untradeable, but what they did is still evidence. Score, relative
+                  strengths and Breadth are all over this number.
                 </InfoTip>
               </th>
               <th style={R}>

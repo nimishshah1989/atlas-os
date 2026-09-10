@@ -8,6 +8,17 @@
 //
 // Pure CSS — hover and focus-within, no state, no effect — so it renders inside a server
 // component with no client bundle, exactly as it does on India.
+//
+// IT MUST RESET WHAT IT INHERITS, and the reason is that its usual home is a table header.
+// `.panel table th` in globals.css sets `white-space: nowrap` (so a column label never wraps) and
+// `text-transform: uppercase` (the desk's small caps) — and a tooltip nested inside that <th>
+// inherits both. The FM caught it on /sectors: a three-sentence explanation rendered AS ONE LINE
+// OF CAPITALS running off the right edge of the screen, past the window, with `w-[290px]` doing
+// nothing because nowrap makes content overflow a fixed width rather than wrap inside it.
+//
+// The bug was there from the port and only became visible when the text got long enough to leave
+// the table. So the panel resets every inherited text property it cares about — case, wrapping,
+// tracking, weight, alignment — rather than trusting whatever element it happens to sit in.
 import type { ReactNode } from 'react'
 
 export function InfoTip({ title, children }: { title?: string; children: ReactNode }) {
@@ -22,7 +33,7 @@ export function InfoTip({ title, children }: { title?: string; children: ReactNo
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute right-0 top-[150%] z-50 w-[290px] rounded-tile border border-edge-rule bg-surface-raised p-3 text-left text-[11.5px] leading-[1.55] text-txt-2 opacity-0 shadow-panel transition-opacity duration-150 group-hover/info:opacity-100 group-focus-within/info:opacity-100"
+        className="pointer-events-none absolute right-0 top-[150%] z-50 w-[290px] max-w-[calc(100vw-32px)] whitespace-normal rounded-tile border border-edge-rule bg-surface-raised p-3 text-left align-baseline text-[11.5px] font-normal normal-case leading-[1.55] tracking-normal text-txt-2 opacity-0 shadow-panel transition-opacity duration-150 group-hover/info:opacity-100 group-focus-within/info:opacity-100"
       >
         {title && (
           <span className="mb-1 block font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">{title}</span>
