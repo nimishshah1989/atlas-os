@@ -128,3 +128,43 @@ def test_the_ddl_still_declares_the_two_closes_the_mapping_reads() -> None:
             assert re.search(rf"^\s+{column}\s+numeric", text, re.MULTILINE), (
                 f"ohlcv_daily has no {column} column"
             )
+
+
+# ── which instruments get a metric row ───────────────────────────────────────
+#
+# Read as TEXT, not imported: this file is pure filesystem by design (see the module docstring)
+# and importing compute_technicals would pull TA-Lib into a test that needs none of it.
+
+_TECHNICALS = _SCRIPTS / "compute_technicals.py"
+
+
+def _targets_sql() -> str:
+    text = _TECHNICALS.read_text()
+    match = re.search(r"TARGETS_SQL = f\"\"\"(.*?)\"\"\"", text, re.S)
+    assert match, "TARGETS_SQL is not in compute_technicals.py — it was renamed"
+    return match.group(1)
+
+
+def test_every_active_etf_is_a_technicals_target_by_default() -> None:
+    """score_etfs' ONLY remaining gate is an inner join on technical_daily, so a fund with no
+    row here cannot be scored however the scorer is written.
+
+    The FM: "we should score all the funds, irrespective… if we have the data for all those
+    funds." Leaving the liquidity cut in compute_technicals moved the same gate one step
+    upstream, where nobody would look for it — and that is exactly what happened on the first
+    run after the scorer was opened: 1,751 scored, the count did not move at all.
+    """
+    sql = _targets_sql()
+    assert "asset_class = 'etf'" in sql, "every active ETF must be a target"
+    assert "in_universe" in sql, "the in-universe stocks are still targets"
+    assert "index_membership" in sql, "former index members keep their history"
+    assert "benchmark_master" in sql, "the benchmarks are still computed"
+
+
+def test_the_stock_side_is_not_widened() -> None:
+    """Stocks are the S&P 500: build_universe_snapshot excludes every other listed company as
+    `not_sp500`, so computing technicals for them would spend the night on rows nothing can
+    score. Only the ETF class is included wholesale."""
+    assert "asset_class = 'stock'" not in _targets_sql(), (
+        "stocks come in through the universe and index membership, never wholesale"
+    )
