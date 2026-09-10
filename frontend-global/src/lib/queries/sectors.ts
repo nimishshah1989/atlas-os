@@ -81,7 +81,16 @@ const rollup = (src: string, key: string) => `
          (count(*) FILTER (WHERE above_ema_200)::numeric
             / nullif(count(above_ema_200), 0))        AS above_ema200_frac,
          (array_agg(symbol ORDER BY composite DESC NULLS LAST))[1] AS top_symbol,
-         (array_agg(name   ORDER BY composite DESC NULLS LAST))[1] AS top_name
+         (array_agg(name   ORDER BY composite DESC NULLS LAST))[1] AS top_name,
+         -- The unscored, split into the three stories they actually tell. Every one is a rule the
+         -- FM set or a fund too young to measure — never a gap in the scorer, which grades
+         -- everything universe_snapshot admits.
+         count(*) FILTER (WHERE composite IS NULL AND exclusion_reason = 'below_floor')  AS n_small,
+         count(*) FILTER (WHERE composite IS NULL AND exclusion_reason IN ('leveraged', 'inverse'))
+                                                                                        AS n_geared,
+         count(*) FILTER (WHERE composite IS NULL
+                            AND exclusion_reason IN ('no_bars', 'too_few_observations', 'stale'))
+                                                                                        AS n_young
   FROM ${src} GROUP BY ${key}
 `
 
@@ -100,6 +109,9 @@ type NodeDbRow = {
   n_ranked: number
   top_symbol: string | null
   top_name: string | null
+  n_small: number
+  n_geared: number
+  n_young: number
 } & Record<`rs_${SectorWindow}`, string | null>
 
 const rsOf = (r: Record<`rs_${SectorWindow}`, string | null>) =>
@@ -121,7 +133,7 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
            r.rs_3m::text, r.rs_6m::text, r.rs_12m::text, r.above_ema200_frac::text,
            RANK() OVER (ORDER BY r.composite DESC NULLS LAST)                    AS rank,
            count(*) FILTER (WHERE r.composite IS NOT NULL) OVER ()                AS n_ranked,
-           r.top_symbol, r.top_name
+           r.top_symbol, r.top_name, r.n_small, r.n_geared, r.n_young
     FROM sector_roll r
     JOIN atlas_global.taxonomy_sector sec ON sec.id = r.group_id
 
@@ -131,7 +143,7 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
            r.rs_3m::text, r.rs_6m::text, r.rs_12m::text, r.above_ema200_frac::text,
            RANK() OVER (PARTITION BY k.sector_id ORDER BY r.composite DESC NULLS LAST),
            count(*) FILTER (WHERE r.composite IS NOT NULL) OVER (PARTITION BY k.sector_id),
-           r.top_symbol, r.top_name
+           r.top_symbol, r.top_name, r.n_small, r.n_geared, r.n_young
     FROM theme_roll r JOIN theme_key k ON k.tx_theme_id = r.group_id
 
     UNION ALL
@@ -144,7 +156,12 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
            s.above_ema_200::int::text,
            RANK() OVER (PARTITION BY s.tx_theme_id ORDER BY s.composite DESC NULLS LAST),
            count(*) FILTER (WHERE s.composite IS NOT NULL) OVER (PARTITION BY s.tx_theme_id),
-           s.symbol, s.name
+           s.symbol, s.name,
+           -- At the leaf the three counts are this ONE fund's own answer, 1 or 0, so the columns
+           -- mean the same thing at every depth exactly as every other column here does.
+           (s.composite IS NULL AND s.exclusion_reason = 'below_floor')::int,
+           (s.composite IS NULL AND s.exclusion_reason IN ('leveraged', 'inverse'))::int,
+           (s.composite IS NULL AND s.exclusion_reason IN ('no_bars', 'too_few_observations', 'stale'))::int
     FROM scoped s
   `
   const [anchor] = await db()<{ date: string | null; n_unthemed: number }[]>`
@@ -173,6 +190,9 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
     n_ranked: Number(r.n_ranked),
     top_symbol: r.top_symbol,
     top_name: r.top_name,
+    n_small: Number(r.n_small),
+    n_geared: Number(r.n_geared),
+    n_young: Number(r.n_young),
     children: [],
   })
 

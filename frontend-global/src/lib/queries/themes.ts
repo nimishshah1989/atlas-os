@@ -52,10 +52,18 @@ export const MEMBERS = `
            s.composite, s.technical, s.risk, s.cost_liquidity,
            t.adv_usd_60d_median, t.above_ema_200,
            t.rs_3m_spy, t.rs_6m_spy, t.rs_12m_spy,
-           em.expense_ratio, em.aum_usd
+           em.expense_ratio, em.aum_usd,
+           -- WHY a fund has no score. score_etfs.py scores exactly what universe_snapshot admits
+           -- (it joins ON u.in_universe), so an unscored fund is an EXCLUDED fund and this column
+           -- is the one reason it is out. The FM had to ask why "42 of 94" were scored; the board
+           -- should have said. NULL here means in-universe.
+           u.exclusion_reason
     FROM atlas_global.etf_classification c
     JOIN atlas_global.instrument_master im USING (instrument_id)
     CROSS JOIN anchor a
+    LEFT JOIN atlas_global.universe_snapshot u
+           ON u.instrument_id = im.instrument_id
+          AND u.date = (SELECT max(date) FROM atlas_global.universe_snapshot)
     LEFT JOIN atlas_global.etf_scores_daily s
            ON s.instrument_id = im.instrument_id AND s.date = a.d
     LEFT JOIN atlas_global.technical_daily t

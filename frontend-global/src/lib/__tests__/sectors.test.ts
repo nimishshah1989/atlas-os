@@ -9,6 +9,7 @@
 // board's own figures come from `queries/sectors.ts` over `etf_scores_daily` (rule #0).
 import { describe, expect, it } from 'vitest'
 import { scoreSpan, sortTree, valueOf, type SectorNode } from '@/lib/sectors'
+import { unscoredReasons } from '@/components/sectors/Unscored'
 
 const node = (
   id: string,
@@ -32,6 +33,9 @@ const node = (
   n_ranked: 0,
   top_symbol: null,
   top_name: null,
+  n_small: 0,
+  n_geared: 0,
+  n_young: 0,
   children: [],
   ...extra,
 })
@@ -115,5 +119,29 @@ describe('the population a tint is cut against', () => {
   it('is NOTHING when no sibling is scored, so the caller paints no colour rather than a flat one', () => {
     expect(scoreSpan([node('solar', 'Solar', 'theme', null)])).toBeNull()
     expect(scoreSpan([])).toBeNull()
+  })
+})
+
+// ── why a fund carries no score ─────────────────────────────────────────────
+//
+// The counts below are the test's own; what is under test is which clauses appear, in what order,
+// and which are omitted. The board's real figures come from `universe_snapshot.exclusion_reason`.
+describe('the unscored, explained', () => {
+  it('names the reasons largest first, so the dominant one is read first', () => {
+    expect(unscoredReasons({ n_small: 50, n_geared: 3, n_young: 9 })).toEqual([
+      '50 below the liquidity floor',
+      '9 too new to measure',
+      '3 geared or inverse',
+    ])
+  })
+
+  it('omits a reason that accounts for nobody — a zero clause is noise, not information', () => {
+    expect(unscoredReasons({ n_small: 4, n_geared: 0, n_young: 0 })).toEqual([
+      '4 below the liquidity floor',
+    ])
+  })
+
+  it('says nothing at all when every fund is scored', () => {
+    expect(unscoredReasons({ n_small: 0, n_geared: 0, n_young: 0 })).toEqual([])
   })
 })

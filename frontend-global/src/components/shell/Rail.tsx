@@ -6,13 +6,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const SECTIONS: { href: string; label: string }[] = [
-  // Countries leads because it IS the front door (the FM's D1): / redirects here, so there is
-  // no separate Today section to link to until one has scored movement to show.
-  { href: '/countries', label: 'Countries' },
+  // Pulse leads because it IS the front door: / redirects here. Then the drill-down in the order
+  // a reader works it — the whole market, then a sector, then the two things you can actually own.
   { href: '/pulse', label: 'Pulse' },
   { href: '/sectors', label: 'Sectors' },
   { href: '/etfs', label: 'ETFs' },
   { href: '/sp500', label: 'S&P 500' },
+  { href: '/countries', label: 'Countries' },
   { href: '/portfolios', label: 'Portfolios' },
   { href: '/methodology', label: 'Methodology' },
   { href: '/health', label: 'Health' },

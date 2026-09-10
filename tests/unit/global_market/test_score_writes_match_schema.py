@@ -271,10 +271,12 @@ def test_score_etfs_sends_no_null_into_a_not_null_column(
 # ── the fallback chain has an end ────────────────────────────────────────────
 
 
-def _groupable(spec: list[tuple[str, str, int]]) -> pd.DataFrame:
+def _groupable(spec: list[tuple[str, str, int]], geared: bool = False) -> pd.DataFrame:
     """``(asset_class, strategy, how many)`` → the frame ``assign_groups`` takes."""
     rows = [{"asset_class": a, "strategy": st} for a, st, n in spec for _ in range(n)]
     frame = pd.DataFrame(rows)
+    frame["leveraged"] = geared
+    frame["inverse"] = False
     frame["ret_6m"] = [0.01 * i for i in range(len(frame))]
     for column in ("vol_63d_ann", "mdd_12m", "downside_dev_63d"):
         frame[column] = 0.1
@@ -392,6 +394,10 @@ def test_the_full_chain_survives_a_group_with_no_peers(
             "ret_6m": [0.01 * i for i in range(total)],
         }
     )
+    # assign_groups REQUIRES these two and raises without them, which is the correct failure:
+    # defaulting a missing flag to False would put 3x funds back among unlevered peers unnoticed.
+    frame["leveraged"] = False
+    frame["inverse"] = False
     grouped = score_etfs.add_percentiles(score_etfs.assign_groups(frame, 8))
     assert grouped["peer_n"].isna().any(), "the fixture must actually contain an unranked group"
 
@@ -554,3 +560,48 @@ def test_low_volatility_and_a_shallow_drawdown_are_the_good_end() -> None:
     assert out["vol_pct"].iloc[0] > out["vol_pct"].iloc[1]
     assert out["mdd_pct"].iloc[0] > out["mdd_pct"].iloc[1]
     assert out["downside_pct"].iloc[0] > out["downside_pct"].iloc[1]
+
+
+# ── geared funds are scored, and ranked only against each other ──────────────
+
+
+def test_a_geared_fund_is_never_ranked_against_an_unlevered_one() -> None:
+    """The FM opened the scoring gate: "we should score all the funds, irrespective… from a
+    scoring point of view, we have coverage that is close to 100%."
+
+    Scoring them is right. Ranking them TOGETHER is not: a 3x semiconductor fund's returns and
+    relative strength are three times an unlevered one's BY CONSTRUCTION, so mixed into
+    equity:thematic it tops every column without telling anyone anything. The peer of a geared
+    fund is another geared fund.
+    """
+    plain = _groupable([("equity", "thematic", 10)])
+    geared = _groupable([("equity", "thematic", 9)], geared=True)
+    out = score_etfs.assign_groups(pd.concat([plain, geared], ignore_index=True), 8)
+    lev = out.loc[out["leveraged"]]
+    unlev = out.loc[~out["leveraged"].astype(bool)]
+    assert set(unlev["peer_group"]) == {"equity:thematic"}
+    assert set(lev["peer_group"]) == {"geared:equity:thematic"}, "its own population"
+    assert set(lev["peer_n"]) == {9}
+    assert set(unlev["peer_n"]) == {10}, "the unlevered group is not inflated by the geared ones"
+
+
+def test_an_inverse_fund_is_geared_for_this_purpose_too() -> None:
+    """A bear fund's returns are the market's, negated. Against unlevered peers it tops every
+    ranking in a falling market and bottoms it in a rising one, and neither is information."""
+    frame = _groupable([("equity", "broad_market", 10)])
+    frame.loc[frame.index[:9], "inverse"] = True
+    out = score_etfs.assign_groups(frame, 8)
+    assert set(out.loc[out["inverse"], "peer_group"]) == {"geared:equity:broad_market"}
+
+
+def test_too_few_geared_funds_to_rank_are_still_scored_but_unranked() -> None:
+    """The fallback chain's end applies to them as it does to everyone: three geared funds are
+    not a population, so they get no rank — and they keep their asset group, so they are still
+    shown and still carry every score cut within it."""
+    plain = _groupable([("equity", "sector", 10)])
+    geared = _groupable([("equity", "sector", 3)], geared=True)
+    out = score_etfs.assign_groups(pd.concat([plain, geared], ignore_index=True), 8)
+    lev = out.loc[out["leveraged"]]
+    assert lev["peer_group"].isna().all(), "no rank rather than a league table of three"
+    assert set(lev["grouped_by"]) == {"unranked"}
+    assert set(lev["asset_group"]) == {"geared:equity"}, "still grouped for its risk percentiles"

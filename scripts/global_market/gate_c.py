@@ -17,9 +17,13 @@ before anyone can act on one:
 * **A decile is a lie in a group that cannot support one.** ``ntile(10)`` over five funds
   produces deciles 1–5 and calls the median fund top-decile. The peer-group fallback exists to
   prevent that; this asserts it actually happened.
-* **The FM's universe cut must hold at the score layer, not just the display layer.** A geared
-  fund with a score row would eventually be ranked, picked up by a basket, or shown as a
-  Leader. Excluding it in the query is the intent; asserting no such row EXISTS is the proof.
+* **A geared fund is ranked only among geared funds.** They ARE scored — the FM opened that
+  gate ("we should score all the funds, irrespective") — but a 3x fund's returns and relative
+  strength are three times an unlevered one's by construction, and a bear fund's are the
+  market's negated, so in a shared population they top every column while informing nobody.
+  ``score_etfs.assign_groups`` puts them in ``geared:<class>``; this asserts both directions of
+  that, because either leak corrupts the same rankings. Basket eligibility is a separate rule
+  and still excludes them outright.
 * **A composite must be traceable.** Every scored row needs a peer group, an asset group and
   at least one active lens; a composite with ``lenses_active = 0`` is a number from nowhere.
 
@@ -94,12 +98,32 @@ GROUP BY asset_group ORDER BY n DESC
 
 # A geared or inverse fund must have no score row at all. The join proves it from the
 # classification the same nightly wrote, not from a re-reading of the fund's name here.
-GEARED_SCORED_SQL = f"""
-SELECT im.symbol
+# GEARED FUNDS ARE SCORED NOW, AND THE INVARIANT MOVED WITH THEM.
+#
+# This gate used to assert that no geared or inverse fund carried a score at all — the universe
+# cut kept them out. The FM opened that gate ("we should score all the funds, irrespective"), so
+# the thing worth protecting is no longer their absence but their SEPARATION: a 3x fund's returns
+# are three times an unlevered one's by construction, so ranked in the same population it tops
+# every column without informing anyone. score_etfs.assign_groups puts them in `geared:<class>`.
+#
+# Both directions are checked, because either leak corrupts the same rankings.
+GEARED_MIXED_SQL = f"""
+SELECT im.symbol, s.asset_group
 FROM {M}.etf_scores_daily s
 JOIN {M}.etf_classification c ON c.instrument_id = s.instrument_id AND c.version = 1
 JOIN {M}.instrument_master im ON im.instrument_id = s.instrument_id
 WHERE s.date = :anchor AND (c.leveraged OR c.inverse)
+  AND (s.asset_group IS NULL OR s.asset_group NOT LIKE 'geared:%')
+LIMIT 20
+"""
+
+PLAIN_IN_GEARED_SQL = f"""
+SELECT im.symbol, s.asset_group
+FROM {M}.etf_scores_daily s
+JOIN {M}.etf_classification c ON c.instrument_id = s.instrument_id AND c.version = 1
+JOIN {M}.instrument_master im ON im.instrument_id = s.instrument_id
+WHERE s.date = :anchor AND NOT (coalesce(c.leveraged, false) OR coalesce(c.inverse, false))
+  AND s.asset_group LIKE 'geared:%'
 LIMIT 20
 """
 
@@ -213,13 +237,22 @@ def check_C(g: Gate, eod: date | None) -> None:
             "population and there is no population."
         )
 
-    geared = _gdb.read_df(GEARED_SCORED_SQL, {"anchor": anchor})
+    mixed = _gdb.read_df(GEARED_MIXED_SQL, {"anchor": anchor})
     g.check(
-        "no geared or inverse fund carries a score",
-        geared.empty,
-        "the universe cut held"
-        if geared.empty
-        else f"scored anyway: {', '.join(geared['symbol'].head(10))}",
+        "every geared or inverse fund is ranked only among geared funds",
+        mixed.empty,
+        "all in a geared asset group"
+        if mixed.empty
+        else f"ranked among unlevered peers: {', '.join(mixed['symbol'].head(10))}",
+    )
+
+    leaked = _gdb.read_df(PLAIN_IN_GEARED_SQL, {"anchor": anchor})
+    g.check(
+        "no unlevered fund is ranked among geared ones",
+        leaked.empty,
+        "the geared groups hold only geared funds"
+        if leaked.empty
+        else f"unlevered in a geared group: {', '.join(leaked['symbol'].head(10))}",
     )
 
     orphans = int(_gdb.read_df(UNCLASSIFIED_SCORED_SQL, {"anchor": anchor})["n"].iloc[0])
