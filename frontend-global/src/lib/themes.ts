@@ -20,6 +20,10 @@ export type ThemeRow = {
    *  ranking and the headline fund on this theme are cut over. A fund can be measured and not
    *  offered; only the offered ones answer "which fund do I buy". */
   n_offered: number
+  /** How many carry a score that is COMPARABLE with the others — everything the scorer graded
+   *  except the geared and inverse, whose returns are a multiple or a negation of the thing. This
+   *  is the population behind the median, the relative strengths and the breadth. */
+  n_comparable: number
   aum_usd: string | null
   /** The MEDIAN member composite. Median, not mean: a theme with one giant fund and nine tiny
    *  ones should not read as the giant. */

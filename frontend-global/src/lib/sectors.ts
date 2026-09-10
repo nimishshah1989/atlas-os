@@ -40,9 +40,15 @@ export type SectorNode = {
    *  nearly everything, so this is close to `n_funds` and says nothing about what is buyable. */
   n_scored: number
   /** How many the FM's universe rules OFFER — not geared, not inverse, above his ADV$ floor,
-   *  enough observations. EVERY median, share, rank and headline fund below is over exactly
-   *  these, because a page that answers "which fund do I buy" may not answer with one he cannot. */
+   *  enough observations. The RANKING and the headline fund are over exactly these, because a page
+   *  that answers "which fund do I buy" may not answer with one he cannot. */
   n_offered: number
+  /** How many carry a score COMPARABLE with the others: everything graded except the geared and
+   *  inverse, whose returns are a multiple or a negation of the thing and cannot share a median.
+   *  The median composite, the relative strengths and the breadth are over exactly these — a fund
+   *  under the liquidity floor is an ordinary fund nobody can trade, and what it did is still
+   *  evidence about the sector. */
+  n_comparable: number
   aum_usd: string | null
   /** 0–100. The member median above the leaf; the fund's own composite at it. */
   composite: string | null

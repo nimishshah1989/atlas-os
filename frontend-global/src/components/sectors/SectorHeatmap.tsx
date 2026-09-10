@@ -207,11 +207,19 @@ function Row({ node, open, toggle, span }: RowProps) {
             )}
           </span>
         </td>
+        {/* TWO POPULATIONS, TWO COLUMNS, because the FM asked for both and he was right to:
+            "viable is 4 out of 12, and score is 12 out of 12. We should show both numbers." */}
         <td
           className={`${NUM} text-ink-2`}
-          title={`${node.n_offered} of ${node.n_funds} funds clear your universe rules — every figure on this row is over those. ${node.n_scored} carry a composite at all.`}
+          title={`${node.n_offered} of ${node.n_funds} funds clear your universe rules — above the liquidity floor, not geared, not inverse. The ranking and the fund to own come from these.`}
         >
           {node.level === 'fund' ? '' : `${node.n_offered}/${node.n_funds}`}
+        </td>
+        <td
+          className={`${NUM} text-ink-2`}
+          title={`${node.n_comparable} of ${node.n_funds} funds carry a score that can share a median — everything graded except the geared and inverse. The score, the relative strengths and the breadth on this row are over these.`}
+        >
+          {node.level === 'fund' ? '' : `${node.n_comparable}/${node.n_funds}`}
         </td>
         <td className={NUM}>
           <ScoreCell node={node} span={span} />
@@ -345,20 +353,25 @@ export function SectorHeatmap({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[940px] border-collapse">
+        <table className="w-full min-w-[1010px] border-collapse">
           <thead>
             <tr className="bg-raised">
               <th style={{ ...L, paddingLeft: 8 }}>{heading}</th>
               <th style={R}>
                 Buyable{' '}
-                <InfoTip title="Buyable, of every fund classified here">
-                  The second number is every fund the classifier put here. The first is how many of
-                  them clear YOUR universe rules — above the liquidity floor, not geared, not
-                  inverse, with enough history to measure. Every figure on the row, the score and
-                  the best fund included, is over that first number: a page that answers &ldquo;which
-                  fund do I buy&rdquo; may not answer with one you cannot. The rest are still
-                  measured and still open from the fund board; they just take no part in a ranking.
-                  Lower the floor on the admin panel and more of them become buyable.
+                <InfoTip title="What you could actually trade">
+                  Of every fund classified here, how many clear your universe rules: above the
+                  liquidity floor, not geared, not inverse. The ranking and the fund to own come
+                  from these. Lower the floor on the admin panel and more qualify.
+                </InfoTip>
+              </th>
+              <th style={R}>
+                Scored{' '}
+                <InfoTip title="What the score is measured over">
+                  Everything the scorer graded except geared and inverse funds, whose returns are a
+                  multiple or a negation of the thing and cannot share a median. Funds below your
+                  floor stay in: untradeable, but what they did is still evidence. Score, relative
+                  strengths and Breadth are all over this number.
                 </InfoTip>
               </th>
               <th style={R}>

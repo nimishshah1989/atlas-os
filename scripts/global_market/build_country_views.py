@@ -37,7 +37,7 @@ after somebody buys it.
 RANK, NOT JUST RELATIVE STRENGTH (P2-E, the FM's decision D2 of 2026-09-09). ``composite`` is
 the representative fund's own composite from ``etf_scores_daily`` — the same number the ETF
 board shows for that fund, read here rather than recomputed, so a country and its fund can
-never disagree. ``breadth_pct`` is the share of that market's OFFERED funds at or above
+never disagree. ``breadth_pct`` is the share of that market's COMPARABLE funds at or above
 ``rollup_breadth_min``: it separates "one strong fund" from "the whole market is working",
 which is the difference between a trade and a theme. Its denominator is the scored members,
 not all members, and the report carries both counts so the page can say which.
@@ -92,7 +92,7 @@ REPORT_COLUMNS = (
     "adv_usd_60d_median",
     "n_etfs",
     "n_eligible",
-    "n_offered",
+    "n_comparable",
     "composite",
     "breadth_pct",
     "rs_3m_spy",
@@ -153,6 +153,11 @@ def members(anchor: dt.date) -> pd.DataFrame:
         not f.leveraged and not f.inverse and not is_currency_hedged(str(n))
         for f, n in zip(flags, frame["name"], strict=True)
     ]
+    # COMPARABLE is a wider set than ELIGIBLE and answers a different question. A currency-hedged
+    # Japan fund cannot REPRESENT Japan — it answers a different question with the same label — but
+    # its score sits perfectly well in a median of Japan funds. Only the geared and the inverse do
+    # not: their returns are a multiple or a negation of the market, by construction.
+    frame["comparable"] = [not f.leveraged and not f.inverse for f in flags]
     return frame.loc[frame["iso2"].notna()]
 
 
@@ -187,23 +192,29 @@ def country_rows(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def breadth(group: pd.DataFrame, minimum: Decimal) -> tuple[int, float | None]:
-    """``(n_offered, percent of them at or above the cut)`` for one country.
+    """``(n_comparable, percent of them at or above the cut)`` for one country.
 
-    THE DENOMINATOR IS THE OFFERED MEMBERS, and it has to be stated rather than assumed. This
-    used to say "the scored members", on the reasoning that geared, inverse and below-floor
-    funds carry no composite by design. They all carry one now — ``score_etfs.py`` grades
-    everything the FM asked it to — so that denominator had quietly become "every fund anyone
-    ever launched on this market". Japan's breadth was counting ProShares UltraShort MSCI Japan,
-    a bet AGAINST Japan scoring 7.55, as evidence that Japan is weak.
+    THE DENOMINATOR IS THE COMPARABLE MEMBERS, and it took two goes to state correctly. It used
+    to say "the scored members", on the reasoning that geared, inverse and below-floor funds
+    carry no composite by design. They all carry one now — ``score_etfs.py`` grades everything
+    the FM asked it to — so that denominator had quietly become "every fund anyone ever launched
+    on this market": Japan's breadth counted ProShares UltraShort MSCI Japan, a bet AGAINST
+    Japan scoring 7.55, as evidence that Japan is weak.
 
-    So the population is ``universe_snapshot.in_universe``: the funds his own rules offer. A
-    market with nothing offered gets ``None`` — not 0, which reads as "measured, and bad".
+    The first correction cut it to ``in_universe``, which overshot. The FM, on the sector card
+    that showed the same overshoot: "the overall score of that healthcare sector is from the 12
+    ETFs that are there and for which we have the data, right?" It should be. A fund under his
+    liquidity floor is an ordinary fund he cannot trade, and what it did is still evidence about
+    the market; a 2x fund's return is not, because it is a multiple of the thing by construction.
+
+    So the population is COMPARABLE: everything graded except the geared and the inverse. A
+    market with nothing comparable gets ``None`` — not 0, which reads as "measured, and bad".
     """
-    offered = group.loc[group["in_universe"].fillna(False).astype(bool), "composite"].dropna()
-    if offered.empty:
+    comparable = group.loc[group["comparable"].fillna(False).astype(bool), "composite"].dropna()
+    if comparable.empty:
         return 0, None
-    above = int((offered >= float(minimum)).sum())
-    return len(offered), round(100.0 * above / len(offered), 2)
+    above = int((comparable >= float(minimum)).sum())
+    return len(comparable), round(100.0 * above / len(comparable), 2)
 
 
 def daily_rows(
@@ -215,7 +226,7 @@ def daily_rows(
     for iso2, group in frame.groupby("iso2", sort=True):
         pick = representative(group)
         n_eligible = int(group["eligible"].sum())
-        n_offered, breadth_pct = breadth(group, breadth_min)
+        n_comparable, breadth_pct = breadth(group, breadth_min)
         # The country's composite IS its representative's, read from the scorer's own row.
         # Averaging the market's funds would blend a strong tracker with the thin products
         # nobody would buy, and the number would then describe no instrument at all.
@@ -242,7 +253,7 @@ def daily_rows(
                 None if pick is None else pick["adv_usd_60d_median"],
                 len(group),
                 n_eligible,
-                n_offered,
+                n_comparable,
                 composite,
                 breadth_pct,
                 None if pick is None else pick["rs_3m_spy"],
