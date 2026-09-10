@@ -188,6 +188,73 @@ else
   kv "probe" "skipped — $APP/scripts/db-probe.mjs or .env.local missing"
 fi
 
+# ── 6b. the database path the PIPELINE uses — NOT the board's ───────────────
+# The probe above reads frontend-global/.env.local: the BOARD's url, the TRANSACTION pooler on
+# :6543, role atlas_global_app. The nightly never touches it. It reads the repo .env and reaches
+# Postgres through scripts/global_market/_gdb.py, on a different port with a different role — and
+# on 2026-09-10 that path was refused outright ("(ECIRCUITBREAKER) too many authentication
+# failures, new connections are temporarily blocked") for a whole run while the section above
+# printed "database path healthy", because the board's path genuinely was. Two paths, two
+# credentials, two ports: a status command that probes one and reports on "the database" is a
+# status command that misleads, and it cost an afternoon of theorising to notice.
+#
+# One connection, one `select 1`, in a subshell so the pipeline's environment cannot leak into
+# the rest of this script. It writes nothing.
+h "database — the PIPELINE's own path (repo .env → _gdb, what the nightly uses)"
+if [ -f "$REPO/.env" ] && [ -x "$REPO/.venv/bin/python" ]; then
+  PIPE_DB=$(
+    set -a; . "$REPO/.env" 2>/dev/null; set +a
+    cd "$REPO" 2>/dev/null && timeout 60 "$REPO/.venv/bin/python" - <<'PYPROBE' 2>&1
+import re, sys, time, urllib.parse
+
+POOLERS = {
+    6543: "TRANSACTION (:6543) — no backend is pinned to a connection",
+    5432: "SESSION (:5432) — one backend pinned per connection, and the cluster has 15",
+}
+
+
+def say_failure(exc: BaseException) -> None:
+    """One line, never a traceback — and never a credential.
+
+    psycopg2 puts the whole DSN into an OperationalError, so the only text that escapes here
+    has had anything shaped like `//user:pass@` cut out of it first. The host and role printed
+    above come from the PARSED url, which carries no password to begin with.
+    """
+    line = (str(exc).strip().splitlines() or [exc.__class__.__name__])[0]
+    print(f"PIPELINE_DB_FAIL       {exc.__class__.__name__}: "
+          f"{re.sub(r'//[^/@ ]*@', '//***@', line)[:240]}")
+
+
+try:
+    sys.path.insert(0, "scripts/global_market")
+    import _gdb  # noqa: E402 - the path insert above is what makes it importable
+
+    url = urllib.parse.urlsplit(_gdb.psycopg2_url())
+    print(f"host                   {url.hostname or '?'}:{url.port or '?'}")
+    print(f"pooler                 {POOLERS.get(url.port or 0, 'direct, or a port this does not know')}")
+    print(f"role                   {url.username or '?'}")
+except BaseException as exc:  # noqa: BLE001 - a status check reports its failure, never raises it
+    say_failure(exc)
+    raise SystemExit(0) from None
+
+started = time.monotonic()
+try:
+    print(f"select 1               {_gdb.scalar('select 1')} in {time.monotonic() - started:.2f}s")
+    print("PIPELINE_DB_OK")
+except BaseException as exc:  # noqa: BLE001 - same: the status command must still print verdicts
+    say_failure(exc)
+PYPROBE
+  ) || true
+  printf '%s\n' "${PIPE_DB:-  (the probe produced no output)}" | sed 's/^/  /'
+  case "$PIPE_DB" in
+    *PIPELINE_DB_OK*)   ok "the pipeline's database path answers" ;;
+    *PIPELINE_DB_FAIL*) bad "the PIPELINE cannot reach the database — the board may still be fine; read the line above" ;;
+    *)                  bad "the pipeline database probe did not finish (timeout, or no venv/_gdb on this box)" ;;
+  esac
+else
+  kv "pipeline probe" "skipped — $REPO/.env or $REPO/.venv/bin/python missing"
+fi
+
 # ── 7. the nightly ───────────────────────────────────────────────────────────
 h "nightly (atlas_global_daily.sh)"
 # Timestamped run logs only: the cron line in the runbook appends to atlas_global_daily_cron.log,
@@ -196,6 +263,20 @@ LAST_NIGHTLY=$(ls -1t "$LOG_DIR"/atlas_global_daily_[0-9]*.log 2>/dev/null | hea
 if [ -n "$LAST_NIGHTLY" ]; then
   kv "last log" "$LAST_NIGHTLY  ($(date -u -r "$LAST_NIGHTLY" +%FT%TZ 2>/dev/null))"
   kv "last lines" ""; tail -3 "$LAST_NIGHTLY" 2>/dev/null | sed 's/^/    /'
+  # The last three lines are the FAILURES roll-call and not one word about WHY. Every step
+  # writes `  FAIL: <name> (<the reason it recorded>)` as it happens, and only the FIRST one is
+  # a cause: on 2026-09-10 thirteen steps failed and twelve of them failed because the first had
+  # already lost the database. Printing the roll-call alone made a one-line cause look like a
+  # thirteen-step collapse.
+  N_FAIL=$(grep -c '^  FAIL: ' "$LAST_NIGHTLY" 2>/dev/null || true)
+  if [ "${N_FAIL:-0}" -gt 0 ]; then
+    kv "steps that failed" "$N_FAIL — every one after the first may be a consequence of it"
+    kv "FIRST failure" ""
+    grep -m1 '^  FAIL: ' "$LAST_NIGHTLY" 2>/dev/null | cut -c1-320 | sed 's/^  /    /'
+    bad "the last nightly failed $N_FAIL step(s) — read the FIRST failure above, not the roll-call"
+  else
+    ok "the last nightly recorded no failed step"
+  fi
 else
   kv "last log" "none under $LOG_DIR"
 fi

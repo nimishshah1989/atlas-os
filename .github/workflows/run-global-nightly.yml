@@ -21,12 +21,18 @@ name: Run Global Nightly
 #           log for its own; then the FAIL lines with their recorded reasons.
 #   install_cron  (run mode) adds the runbook's cron line if no atlas_global_daily entry
 #           exists.
-#   update_checkout  (run mode) fast-forwards the box to origin/main first. deploy-global.yml
+#   update_checkout  (run AND status) fast-forwards the box to origin/main first. deploy-global.yml
 #           is the ONLY thing that moves the box's checkout, and it fires on frontend paths
 #           alone — deliberately, since the nightly's Python changes no served byte. The cost
 #           is that a Python-only fix to scripts/global_market/** never reaches the box, and a
 #           run started here would then execute the OLD code and report a failure already
 #           fixed. So run mode always PRINTS what it is about to run, and this input moves it.
+#           STATUS mode takes it too, and needs it for the same reason one step further out:
+#           the diagnostics it runs are the box's own copy of atlas_global_status.sh, so without
+#           it a better diagnostic could reach the box only by running the whole nightly — the
+#           one thing you do not want to do while diagnosing why the nightly failed. In status
+#           mode it is refused while the pipeline lock is held, because fast-forwarding the
+#           working tree under a running pipeline swaps the code out from under a live step.
 #   set_box_env   (run mode) copies ALPACA_API_KEY, ALPACA_API_SECRET and EDGAR_IDENTITY from
 #           GitHub Actions secrets into the box .env, so nobody has to SSH to add a key and no
 #           credential is ever typed into this file. The values reach the box through the
@@ -79,7 +85,7 @@ on:
         default: false
         type: boolean
       update_checkout:
-        description: "run mode only: fast-forward the box checkout to origin/main before running"
+        description: "run + status: fast-forward the box checkout to origin/main first (status refuses while the pipeline lock is held)"
         required: false
         default: false
         type: boolean
@@ -225,6 +231,24 @@ jobs:
               echo "== S&P 500 fundamental cross-section (the 37 bands are set from this) =="
               XL=$(grep -l 'fundamental cross-section' $(ls -1t "$LOGS"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -5) 2>/dev/null | head -1 || true)
               if [ -n "$XL" ]; then echo "  from $XL"; awk '/fundamental cross-section/{n=1} n && n++<16' "$XL" | redact; else echo "  no recent nightly log printed one"; fi
+
+              # STATUS MODE MAY MOVE THE CHECKOUT TOO — but only with the lock free. The script
+              # this mode runs is the BOX'S copy of atlas_global_status.sh, so until this existed
+              # an improvement to the diagnostics could reach the box only by running the whole
+              # nightly, which is the one thing you do not want to do while diagnosing it. It is
+              # refused while the lock is held: fast-forwarding the working tree under a running
+              # pipeline would swap the code out from under a step mid-run.
+              timeout 20 git -C "$REPO" fetch origin main --quiet 2>/dev/null || echo "  (fetch failed — 'behind' is measured against the last known origin/main)"
+              BEHIND=$(git -C "$REPO" rev-list --count HEAD..origin/main 2>/dev/null || echo "?")
+              echo "== box checkout: $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?') ($BEHIND commit(s) behind origin/main) =="
+              if [ "${{ inputs.update_checkout }}" = "true" ] && [ -n "$LH" ]; then
+                echo "  REFUSED to fast-forward: the pipeline lock is HELD (pids above). Re-run when it is free."
+              elif [ "${{ inputs.update_checkout }}" = "true" ]; then
+                git -C "$REPO" checkout main --quiet && git -C "$REPO" merge --ff-only origin/main || echo "REFUSED to fast-forward — the box has diverged, which a person must look at"
+                echo "  checkout now at $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
+              elif [ "$BEHIND" != "0" ] && [ "$BEHIND" != "?" ]; then
+                echo "  WARNING: the diagnostics below are $BEHIND commit(s) behind main. Re-run with update_checkout=true to move them."
+              fi
 
               echo "== atlas_global_status.sh =="
               bash "$REPO/scripts/ops/atlas_global_status.sh" 2>&1 | redact || true
