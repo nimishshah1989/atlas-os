@@ -19,9 +19,10 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
   const { row, funds, date } = detail
   const median = row.median_composite == null ? null : Number(row.median_composite)
   const top = row.top_composite == null ? null : Number(row.top_composite)
-  const showDecile = row.n_scored >= minMembers
-  // Rank order, and only what carries a rank: an unranked fund was never scored, so seeding one
-  // into a basket would propose buying something the board refused to grade.
+  const showDecile = row.n_offered >= minMembers
+  // Rank order, and only what carries a rank: an unranked fund is one the FM's universe rules do
+  // not offer — geared, inverse, or below his floor — so seeding one into a basket would propose
+  // buying something the board deliberately keeps out.
   const ranked = funds.filter((f) => f.rank != null).map((f) => f.symbol)
 
   return (
@@ -42,9 +43,9 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
       <PageHeader
         title={row.name}
         lead={
-          row.n_scored === 0
-            ? 'No fund carrying this theme is scored yet — all are geared, hedged or below the liquidity floor.'
-            : `${row.n_scored} of ${row.n_funds} funds carrying this theme are scored, and ranked against each other below.`
+          row.n_offered === 0
+            ? 'No fund carrying this theme is one you can buy — every one is geared, inverse or below your liquidity floor.'
+            : `${row.n_offered} of the ${row.n_funds} funds carrying this theme clear your universe rules, and are ranked against each other below.`
         }
         aside={<EodStamp eod={date} asOf={date} />}
       />
@@ -53,12 +54,12 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
         <StatCard
           label="Median score"
           value={median == null ? '—' : median.toFixed(0)}
-          sub={`over ${row.n_scored} scored ${row.n_scored === 1 ? 'fund' : 'funds'}`}
+          sub={`over ${row.n_offered} ${row.n_offered === 1 ? 'fund' : 'funds'} you can buy`}
         />
         <StatCard
           label="Above 200-day"
           value={row.above_ema200_frac == null ? '—' : formatPct(row.above_ema200_frac, 0)}
-          sub="members trading above their own EMA-200"
+          sub="of those, trading above their own EMA-200"
         />
         <StatCard label="Funds" value={row.n_funds} sub={row.sector_name ?? 'unparented'} />
         <StatCard
@@ -109,8 +110,8 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
         }
         note={
           showDecile
-            ? `ranked and decile-cut across the ${row.n_scored} scored members`
-            : `ranked across ${row.n_scored} scored ${row.n_scored === 1 ? 'member' : 'members'} — too few for a decile (the FM's floor is ${minMembers})`
+            ? `ranked and decile-cut across the ${row.n_offered} members you can buy`
+            : `ranked across ${row.n_offered} ${row.n_offered === 1 ? 'member' : 'members'} you can buy — too few for a decile (your floor is ${minMembers})`
         }
       >
         <ThemeFundTable funds={funds} showDecile={showDecile} />

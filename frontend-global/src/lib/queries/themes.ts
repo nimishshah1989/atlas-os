@@ -53,10 +53,13 @@ export const MEMBERS = `
            t.adv_usd_60d_median, t.above_ema_200,
            t.rs_3m_spy, t.rs_6m_spy, t.rs_12m_spy,
            em.expense_ratio, em.aum_usd,
-           -- WHY a fund has no score. score_etfs.py scores exactly what universe_snapshot admits
-           -- (it joins ON u.in_universe), so an unscored fund is an EXCLUDED fund and this column
-           -- is the one reason it is out. The FM had to ask why "42 of 94" were scored; the board
-           -- should have said. NULL here means in-universe.
+           -- MEASURED IS NOT OFFERED. score_etfs.py grades every fund (the FM: "we should score
+           -- all the funds… coverage close to 100%"), so a composite says only that we looked.
+           -- in_universe is the separate question of whether the FM's rules OFFER the fund —
+           -- not geared, not inverse, above his ADV$ floor, enough observations — and it is the
+           -- population every ranking, median and headline pick on the theme and sector surfaces
+           -- is cut over. exclusion_reason says which rule left it out.
+           coalesce(u.in_universe, false) AS in_universe,
            u.exclusion_reason
     FROM atlas_global.etf_classification c
     JOIN atlas_global.instrument_master im USING (instrument_id)
@@ -83,6 +86,7 @@ type ThemeDbRow = {
   sector_name: string | null
   n_funds: number | null
   n_scored: number | null
+  n_offered: number | null
   aum_usd: string | null
   median_composite: string | null
   above_ema200_frac: string | null
@@ -128,7 +132,7 @@ const listInner = eodCached(async (): Promise<ThemeList> => {
              CASE WHEN count(*) OVER (PARTITION BY m.theme_id) >= ${min}
                   THEN ntile(10) OVER (PARTITION BY m.theme_id ORDER BY m.composite)
              END AS decile_in_theme
-      FROM member m WHERE m.composite IS NOT NULL
+      FROM member m WHERE m.composite IS NOT NULL AND m.in_universe
     )
     SELECT tx.id, tx.name,
            parent.id   AS sector_id,
@@ -136,19 +140,29 @@ const listInner = eodCached(async (): Promise<ThemeList> => {
            (SELECT max(date)::text FROM atlas_global.etf_scores_daily) AS date,
            count(m.instrument_id)                                  AS n_funds,
            count(m.composite)                                      AS n_scored,
+           count(*) FILTER (WHERE m.in_universe)                    AS n_offered,
            sum(m.aum_usd)::text                                    AS aum_usd,
            -- ::numeric before ::text on every one of these: see the note in pulse.ts. A double
            -- rendered as "5e-17" is what a percentile between two near-equal returns produces,
            -- and the board's formatters refuse that string by design.
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.composite)::numeric(6,2)::text  AS median_composite,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_3m_spy)::numeric::text                AS rs_3m,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_6m_spy)::numeric::text                AS rs_6m,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_12m_spy)::numeric::text               AS rs_12m,
-           -- share of MEASURED members above their own 200-day EMA: count(x) is the measured
-           -- denominator, so a theme whose members are too young for a 200-day line is null
-           -- rather than 0% (rule #0).
-           (count(*) FILTER (WHERE m.above_ema_200)::numeric
-              / nullif(count(m.above_ema_200), 0))::text           AS above_ema200_frac,
+           -- OVER THE OFFERED MEMBERS. A theme's median is what its buyable funds are doing:
+           -- including a -3x bear ETN or a fund trading seven thousand dollars a day describes a
+           -- theme nobody can hold. Quantum Computing's median read 22.7 with the geared funds in
+           -- and 39.7 without them — a seventeen-point difference on a card the FM ranks by.
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.composite)
+             FILTER (WHERE m.in_universe)::numeric(6,2)::text      AS median_composite,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_3m_spy)
+             FILTER (WHERE m.in_universe)::numeric::text           AS rs_3m,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_6m_spy)
+             FILTER (WHERE m.in_universe)::numeric::text           AS rs_6m,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_12m_spy)
+             FILTER (WHERE m.in_universe)::numeric::text           AS rs_12m,
+           -- share of MEASURED offered members above their own 200-day EMA: count(x) is the
+           -- measured denominator, so a theme whose members are too young for a 200-day line is
+           -- null rather than 0% (rule #0).
+           (count(*) FILTER (WHERE m.above_ema_200 AND m.in_universe)::numeric
+              / nullif(count(m.above_ema_200) FILTER (WHERE m.in_universe), 0))::text
+                                                                   AS above_ema200_frac,
            lead.symbol                                             AS top_symbol,
            lead.name                                               AS top_name,
            lead.composite::text                                    AS top_composite,
@@ -180,6 +194,7 @@ const listInner = eodCached(async (): Promise<ThemeList> => {
       sector_name: r.sector_name,
       n_funds: r.n_funds ?? 0,
       n_scored: r.n_scored ?? 0,
+      n_offered: r.n_offered ?? 0,
       aum_usd: r.aum_usd,
       median_composite: r.median_composite,
       above_ema200_frac: r.above_ema200_frac,
@@ -215,6 +230,8 @@ type FundDbRow = {
   inverse: boolean | null
   hedged: boolean | null
   role_id: string | null
+  in_universe: boolean | null
+  exclusion_reason: string | null
 } & Record<`rs_${ThemeWindow}`, string | null>
 
 const detailInner = eodCached(async (id: string): Promise<ThemeDetail | null> => {
@@ -231,7 +248,11 @@ const detailInner = eodCached(async (id: string): Promise<ThemeDetail | null> =>
              RANK() OVER (ORDER BY composite DESC) AS rank,
              CASE WHEN count(*) OVER () >= ${min}
                   THEN ntile(10) OVER (ORDER BY composite) END AS decile
-      FROM mine WHERE composite IS NOT NULL
+      -- OFFERED ONLY, and the case that named the rule: "Direxion Daily AI and Big Data BEAR 2X"
+      -- was ranked inside the Artificial Intelligence theme — a fund that pays when AI FALLS,
+      -- listed among ways to own AI — while the theme's headline pick was COOL, which trades zero
+      -- dollars a day. On the live board 8 of 32 themes were headed by a fund the FM cannot buy.
+      FROM mine WHERE composite IS NOT NULL AND in_universe
     )
     SELECT m.instrument_id::text AS instrument_id, m.symbol, m.name,
            sc.rank, sc.decile,
@@ -243,6 +264,7 @@ const detailInner = eodCached(async (id: string): Promise<ThemeDetail | null> =>
            m.expense_ratio::text  AS expense_ratio,
            m.aum_usd::text        AS aum_usd,
            m.leveraged, m.inverse, m.hedged, m.role_id,
+           m.in_universe, m.exclusion_reason,
            m.rs_3m_spy::text  AS rs_3m,
            m.rs_6m_spy::text  AS rs_6m,
            m.rs_12m_spy::text AS rs_12m
@@ -272,6 +294,8 @@ const detailInner = eodCached(async (id: string): Promise<ThemeDetail | null> =>
       inverse: f.inverse,
       hedged: f.hedged,
       role_id: f.role_id,
+      in_universe: f.in_universe ?? false,
+      exclusion_reason: f.exclusion_reason,
       rs: rsOf(f),
     })),
   }

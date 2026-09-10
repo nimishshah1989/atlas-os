@@ -30,6 +30,10 @@ export type CountryRow = {
   rank: number | null
   /** How many markets carry a composite at all — the denominator behind `rank`. */
   n_ranked: number
+  /** Why the FM's universe rules do not offer the REPRESENTATIVE fund; null when they do. A
+   *  market whose only funds sit under his floor still gets a row and a score — the market is
+   *  covered — but the grid has to say that the fund standing for it is not one he can buy. */
+  exclusion_reason: string | null
   /** Relative strength vs SPY in the ADR-0002 relative form, as a fraction. */
   rs: Record<RsWindow, string | null>
 }
@@ -57,6 +61,12 @@ export type CountryFund = {
   leveraged: boolean | null
   inverse: boolean | null
   hedged: boolean | null
+  /** Whether the FM's universe rules OFFER this fund: not geared, not inverse, above his ADV$
+   *  floor, with enough observations. A fund can be scored and not offered — measuring a fund is
+   *  not the same as putting it forward, and only the offered ones carry a rank. */
+  in_universe: boolean
+  /** Why the universe leaves it out, straight from `universe_snapshot`; null when it is in. */
+  exclusion_reason: string | null
   /** True for the one fund the builder chose to stand for this market. */
   is_representative: boolean
   rs: Record<RsWindow, string | null>

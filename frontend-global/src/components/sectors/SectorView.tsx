@@ -37,11 +37,11 @@ export function SectorView({ detail }: { detail: SectorDetail }) {
       <PageHeader
         title={node.name}
         lead={
-          node.n_scored === 0
-            ? 'No fund under this sector is scored yet.'
-            : `${node.n_children} ${node.n_children === 1 ? 'theme' : 'themes'}, ${node.n_scored} scored ${
-                node.n_scored === 1 ? 'fund' : 'funds'
-              }${scoredStocks > 0 ? `, and ${scoredStocks} scored S&P 500 members` : ''}.`
+          node.n_offered === 0
+            ? 'No fund under this sector clears your universe rules yet.'
+            : `${node.n_children} ${node.n_children === 1 ? 'theme' : 'themes'}, ${node.n_offered} ${
+                node.n_offered === 1 ? 'fund' : 'funds'
+              } you can buy${scoredStocks > 0 ? `, and ${scoredStocks} scored S&P 500 members` : ''}.`
         }
         aside={date ? <EodStamp eod={date} asOf={date} /> : undefined}
       />
@@ -59,7 +59,7 @@ export function SectorView({ detail }: { detail: SectorDetail }) {
         <StatCard
           label="Above 200-day"
           value={node.above_ema200_frac == null ? '—' : formatPct(node.above_ema200_frac, 0)}
-          sub="of the sector's measured funds"
+          sub="of the funds you can buy here"
         />
         <StatCard label="Themes" value={node.n_children} sub={`over ${node.n_funds} classified funds`} />
         <StatCard label="Assets" value={formatUsdCompact(node.aum_usd)} sub="in its themed funds" />

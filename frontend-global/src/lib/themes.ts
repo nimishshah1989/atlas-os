@@ -14,8 +14,12 @@ export type ThemeRow = {
   sector_name: string | null
   /** Every classified fund carrying this theme, whether or not it is scored. */
   n_funds: number
-  /** How many of them carry a composite — the denominator behind every figure below. */
+  /** How many of them the scorer MEASURED. Coverage, not a population. */
   n_scored: number
+  /** How many of those the FM's universe rules OFFER — the population every median, the
+   *  ranking and the headline fund on this theme are cut over. A fund can be measured and not
+   *  offered; only the offered ones answer "which fund do I buy". */
+  n_offered: number
   aum_usd: string | null
   /** The MEDIAN member composite. Median, not mean: a theme with one giant fund and nine tiny
    *  ones should not read as the giant. */
@@ -55,6 +59,10 @@ export type ThemeFund = {
   inverse: boolean | null
   hedged: boolean | null
   role_id: string | null
+  /** Whether the FM's universe rules OFFER this fund. Only the offered carry a rank. */
+  in_universe: boolean
+  /** Which rule leaves it out, from `universe_snapshot`; null when it is in. */
+  exclusion_reason: string | null
   rs: Record<ThemeWindow, string | null>
 }
 

@@ -34,10 +34,15 @@ export type SectorNode = {
   symbol: string | null
   /** Members BELOW this node: themes for a sector, funds for a theme, 0 for a fund. */
   n_children: number
-  /** Distinct funds under this node (1 at the leaf) — the denominator behind `n_scored`. */
+  /** Distinct funds under this node (1 at the leaf) — the denominator behind `n_offered`. */
   n_funds: number
-  /** How many of those carry a composite. Every median below is over exactly these. */
+  /** How many of those the scorer MEASURED. Coverage, not a population: score_etfs.py grades
+   *  nearly everything, so this is close to `n_funds` and says nothing about what is buyable. */
   n_scored: number
+  /** How many the FM's universe rules OFFER — not geared, not inverse, above his ADV$ floor,
+   *  enough observations. EVERY median, share, rank and headline fund below is over exactly
+   *  these, because a page that answers "which fund do I buy" may not answer with one he cannot. */
+  n_offered: number
   aum_usd: string | null
   /** 0–100. The member median above the leaf; the fund's own composite at it. */
   composite: string | null
@@ -55,13 +60,13 @@ export type SectorNode = {
   /** The strongest scored fund anywhere under this node, for the "what would I buy" column. */
   top_symbol: string | null
   top_name: string | null
-  /** WHY the unscored funds under this node have no score, split three ways. They always sum to
-   *  `n_funds − n_scored`, because score_etfs.py grades exactly what `universe_snapshot` admits —
-   *  an unscored fund is an EXCLUDED fund, never one the scorer failed on.
+  /** WHY the funds under this node are not OFFERED, split three ways. They sum to
+   *  `n_funds − n_offered`: every exclusion is one of these, and two of the three are the FM's
+   *  own rules rather than anything the pipeline failed at.
    *
    *  Below the FM's liquidity floor: trades less than `liquidity_min_traded_value_usd` a day. */
   n_small: number
-  /** Geared or inverse — deliberately never scored, and never basket-eligible. */
+  /** Geared or inverse — measured like everything else, never offered and never basket-eligible. */
   n_geared: number
   /** Too young or too thin to measure: no bars, fewer than the minimum observations, or stale. */
   n_young: number
