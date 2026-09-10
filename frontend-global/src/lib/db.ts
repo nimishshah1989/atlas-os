@@ -36,15 +36,39 @@ if (url && !url.includes(':6543/')) {
   )
 }
 
-// max: 5 per function instance — Vercel scales instances horizontally and the pooler
-// multiplexes; idle connections are recycled quickly so cold instances do not pin slots.
+// THE POOL IS THE WHOLE BOARD'S, NOT ONE REQUEST'S — and it was sized as if it were not.
+//
+// `max: 5` came with the reason "per function instance — Vercel scales instances horizontally",
+// and on Vercel that is right: many short-lived instances, five connections each, idle ones
+// recycled. This board does not run on Vercel. It is ONE long-lived pm2 process on the box, so
+// that five is the entire site's budget — every route, every visitor, every concurrent render.
+//
+// It held while every query was fast, because a connection came back in milliseconds and nobody
+// could see the ceiling. On 2026-09-10 the scored set went from 1,751 funds to 5,486 and some
+// renders began taking ten seconds or more. Five of those and the pool is empty; everything
+// else queues behind them. The symptom was not "the slow pages are slow" — it was that
+// /countries, whose query is cheap, sent its full 171 KB of HTML and then hung forever waiting
+// for a connection that was never coming. A wedged pool looks exactly like a broken page.
+//
+// Worse, it does not recover. A client that gives up does not stop the query it started, and
+// nothing here bounds one, so an abandoned request keeps its slot until the process restarts.
+// statement_timeout is the fix for that: the DATABASE ends a query the board has stopped
+// waiting for, so a slot always comes back. Supabase's transaction pooler may not honour a
+// startup parameter, so this is a best-effort backstop and NOT the reason the pool is safe —
+// the size is.
+//
+// 20 costs nothing here. This is the TRANSACTION pooler (:6543, enforced above), which
+// multiplexes client connections onto far fewer backends and never touches the 15 SESSION
+// slots India's board holds — the constraint that made 5 feel prudent applies to a different
+// port entirely.
 const client: Db | null = url
   ? postgres(url, {
-      max: 5,
+      max: 20,
       prepare: false,
       idle_timeout: 20,
       max_lifetime: 60 * 5,
       connect_timeout: 10,
+      connection: { statement_timeout: 30_000 }, // milliseconds — the type is numeric, not '30s'
       ssl: url.includes('sslmode=require') ? { rejectUnauthorized: false } : false,
     })
   : null
