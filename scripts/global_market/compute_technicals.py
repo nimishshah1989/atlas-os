@@ -15,11 +15,18 @@ All the arithmetic is in :mod:`technicals_global`; this file is the I/O around i
 Which instruments
 -----------------
 ``--scope universe`` (the default) is the set that can actually be scored or charted:
-``universe_snapshot.in_universe`` on the latest snapshot, PLUS every instrument
-``index_membership`` has ever carried (a former S&P 500 member is out of the universe but
-its history is what backtests and the IC study read), PLUS the active benchmarks. Computing
-all 13k listings is possible — ``--scope all`` — but most of them are never shown, never
-scored and never a benchmark, so the default does not spend the night on them.
+``universe_snapshot.in_universe`` on the latest snapshot, PLUS EVERY ACTIVE ETF, PLUS every
+instrument ``index_membership`` has ever carried (a former S&P 500 member is out of the
+universe but its history is what backtests and the IC study read), PLUS the active benchmarks.
+
+Every active ETF is in that set because ``score_etfs`` stopped gating on ``in_universe`` and
+its only remaining gate is an inner join on ``technical_daily``: a fund absent here cannot be
+scored however the scorer is written, so the liquidity cut would just move upstream where
+nobody would look for it. The stock side is not widened — stocks are the S&P 500, and six
+thousand names that can never be scored are not worth a night.
+
+``--scope all`` still exists for every active stock and ETF, roughly 13k listings; the default
+does not spend the night on the stocks among them.
 
 The price basis
 ---------------
@@ -115,13 +122,25 @@ WHERE instrument_id = (SELECT instrument_id FROM {M}.instrument_master
 ORDER BY date
 """
 
-# in_universe on the latest snapshot, every instrument index_membership has ever carried,
-# and the active benchmarks. asset_class comes from instrument_master, which is also what
-# restricts the set to the two classes technical_daily's CHECK allows.
+# in_universe on the latest snapshot, EVERY ACTIVE ETF, every instrument index_membership has
+# ever carried, and the active benchmarks. asset_class comes from instrument_master, which is
+# also what restricts the set to the two classes technical_daily's CHECK allows.
+#
+# WHY EVERY ACTIVE ETF, AND NOT JUST THE IN-UNIVERSE ONES. score_etfs no longer gates on
+# `in_universe` — the FM: "we should score all the funds, irrespective… if we have the data" —
+# and its only remaining gate is an inner join on THIS table. So a fund missing here is a fund
+# that cannot be scored no matter what the scorer does, and leaving the liquidity cut in place
+# here would simply move the same gate one step upstream where nobody would look for it.
+#
+# THE STOCK SIDE IS UNCHANGED, deliberately. He said FUNDS. Stocks are still the S&P 500 —
+# build_universe_snapshot excludes every other listed company as `not_sp500` — so computing
+# technicals for six thousand names that can never be scored would spend the night on nothing.
 TARGETS_SQL = f"""
 WITH picked AS (
     SELECT instrument_id FROM {M}.universe_snapshot
     WHERE date = (SELECT max(date) FROM {M}.universe_snapshot) AND in_universe
+    UNION SELECT instrument_id FROM {M}.instrument_master
+    WHERE is_active AND asset_class = 'etf'
     UNION SELECT instrument_id FROM {M}.index_membership
     UNION SELECT instrument_id FROM {M}.benchmark_master WHERE is_active
 )
