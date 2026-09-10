@@ -47,11 +47,16 @@ const NUM = 'px-2 py-1.5 text-right font-num text-[12.5px] tabular-nums'
 
 /** Where a level's rows are indented to, and what its children are CALLED — the word a reader
  *  needs to know what expanding will show them. */
-const LEVEL: Record<SectorNode['level'], { pad: number; child: string; kids: string }> = {
-  sector: { pad: 8, child: 'theme', kids: 'themes' },
-  theme: { pad: 26, child: 'fund', kids: 'funds' },
-  fund: { pad: 44, child: '', kids: '' },
+const LEVEL: Record<SectorNode['level'], { pad: number; child: string }> = {
+  sector: { pad: 8, child: 'theme' },
+  theme: { pad: 26, child: 'fund' },
+  fund: { pad: 44, child: '' },
 }
+
+/** "1 theme", not "1 themes". A sector carrying exactly one theme is a real and common row —
+ *  Consumer Staples, Consumer Discretionary and Communication Services each have one today — and
+ *  the board is read by someone who notices. */
+const count = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`
 
 function Chevron({ open }: { open: boolean }) {
   return (
@@ -170,7 +175,7 @@ function Row({ node, open, toggle, span }: RowProps) {
                 type="button"
                 onClick={() => toggle(key)}
                 aria-expanded={isOpen}
-                aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${node.name} — ${kids.length} ${meta.kids}`}
+                aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${node.name} — ${count(kids.length, meta.child)}`}
                 className="flex h-4 w-4 items-center justify-center rounded text-ink-3 hover:bg-inset hover:text-ink"
               >
                 <Chevron open={isOpen} />
