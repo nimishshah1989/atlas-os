@@ -52,7 +52,7 @@ export function SectorView({ detail }: { detail: SectorDetail }) {
           value={node.composite == null ? '—' : formatDecimal(node.composite, 0)}
           sub={
             node.rank == null
-              ? 'nothing scored here yet'
+              ? 'nothing buyable here yet'
               : `${node.rank} of ${node.n_ranked} sectors`
           }
         />

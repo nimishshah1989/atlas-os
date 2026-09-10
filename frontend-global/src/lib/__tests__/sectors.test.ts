@@ -7,6 +7,8 @@
 // classify. The SCORES are the test's own algebra — this file tests a comparator, and a comparator
 // is proved by the orderings it must produce, not by a market. No number here reaches a page: the
 // board's own figures come from `queries/sectors.ts` over `etf_scores_daily` (rule #0).
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { scoreSpan, sortTree, valueOf, type SectorNode } from '@/lib/sectors'
 import { unscoredReasons } from '@/components/sectors/Unscored'
@@ -144,5 +146,27 @@ describe('the unscored, explained', () => {
 
   it('says nothing at all when every fund is scored', () => {
     expect(unscoredReasons({ n_small: 0, n_geared: 0, n_young: 0 })).toEqual([])
+  })
+})
+
+// ── the label has to mean the number ──────────────────────────────────────────────────────────
+describe('the fraction column says what the fraction counts', () => {
+  // THE FM READ THIS COLUMN AND THOUGHT THE PIPELINE HAD REGRESSED. The board used to print
+  // `n_scored / n_funds` under a heading that said "Scored". Moving every figure on the row to the
+  // BUYABLE population changed the numerator to `n_offered` — Health Care went from 12/12 back to
+  // 4/12 — and left the heading alone, so the page now said "Scored 4 of 12" about a scorer that
+  // had graded all twelve. The numbers were right and the word was a year out of date, which is
+  // indistinguishable from a broken pipeline to anyone reading the page instead of the diff.
+  const heatmap = readFileSync(
+    join(process.cwd(), 'src', 'components', 'sectors', 'SectorHeatmap.tsx'),
+    'utf8',
+  )
+
+  it('renders n_offered under a heading that says buyable, never scored', () => {
+    expect(heatmap).toContain('${node.n_offered}/${node.n_funds}')
+    expect(heatmap).toContain('Buyable')
+    // The word may still appear in the tooltip, which explains BOTH numbers. It may not be the
+    // heading, which is the only part most readers ever see.
+    expect(heatmap).not.toMatch(/^\s*Scored\{' '\}/m)
   })
 })
