@@ -24,7 +24,7 @@ export function sectorItems(rows: readonly SectorNode[]): RankItem[] {
     .map((r) => ({
       id: r.id,
       name: r.name,
-      href: `/sectors#${encodeURIComponent(r.id)}`,
+      href: `/sectors/${encodeURIComponent(r.id)}`,
       score: r.composite,
       rs: r.rs['3m'],
       meta: plural(r.n_children, 'theme'),

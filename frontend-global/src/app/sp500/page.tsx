@@ -1,4 +1,4 @@
-// src/app/stocks/page.tsx — the S&P 500 board (and every other listed stock behind the index
+// src/app/sp500/page.tsx — the S&P 500 board (and every other listed stock behind the index
 // facet). Logic lives in components/explorer.
 import { ExplorerPage } from '@/components/explorer/ExplorerPage'
 

@@ -79,6 +79,27 @@ export type InstrumentDbRow = {
   aum_usd: string | null
 }
 
+// ── where a market lives on the board ───────────────────────────────────────
+//
+// The FM: "don't name it as stock; name it as S&P 500, and ETFs are ETFs." The board's stock side
+// IS the S&P 500 — build_universe_snapshot excludes every other listed company as `not_sp500` —
+// so calling it "stocks" described the table rather than the product.
+//
+// The DATABASE still says `stock`: that is instrument_master.asset_class, an identity column with
+// a producer behind it, and renaming a column to match a label is how a schema starts drifting
+// from its feeds. The mapping between the two lives here, once, so no component builds a route by
+// concatenating an asset class again.
+
+export const MARKET_PATH: Record<AssetClass, string> = { etf: '/etfs', stock: '/sp500' }
+export const MARKET_LABEL: Record<AssetClass, string> = { etf: 'ETFs', stock: 'S&P 500' }
+/** The plural noun in a count line: "1,747 ETFs", "503 S&P 500 companies". */
+export const MARKET_NOUN: Record<AssetClass, string> = { etf: 'ETFs', stock: 'S&P 500 companies' }
+
+/** One instrument's page. Never `/${assetClass}s/…` — that spelling is what tied the URL to a
+ *  column name and produced `/stocks`. */
+export const instrumentPath = (assetClass: AssetClass, symbol: string) =>
+  `${MARKET_PATH[assetClass]}/${encodeURIComponent(symbol)}`
+
 /** A snake_case token as words, for values that arrive as machine tokens (an exclusion reason). */
 export const words = (token: string) => token.replace(/_/g, ' ')
 

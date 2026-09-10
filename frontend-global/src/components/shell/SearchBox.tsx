@@ -7,7 +7,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons'
 
-const EXPLORERS = ['/etfs', '/stocks']
+const EXPLORERS = ['/etfs', '/sp500']
 
 export function SearchBox() {
   const pathname = usePathname()

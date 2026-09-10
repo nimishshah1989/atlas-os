@@ -29,7 +29,7 @@
 // filters and always split the funds actually on screen.
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import type { InstrumentRow } from '@/lib/facts'
+import { instrumentPath, type InstrumentRow } from '@/lib/facts'
 import { formatPct, formatUsd } from '@/lib/format'
 import { decileColour, peerGroupLabel, peerGroupOf } from '@/lib/scores'
 
@@ -200,7 +200,7 @@ export function StrengthRiskBubble({
                   style={{ cursor: 'pointer' }}
                   onMouseEnter={() => setHover(p)}
                   onMouseLeave={() => setHover(null)}
-                  onClick={() => router.push(`/${assetClass}s/${encodeURIComponent(p.symbol)}`)}
+                  onClick={() => router.push(instrumentPath(assetClass, p.symbol))}
                 >
                   <title>{`${p.symbol} — composite ${p.x.toFixed(1)}, volatility ${formatPct(String(p.y), 1)}`}</title>
                 </circle>

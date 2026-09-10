@@ -10,7 +10,7 @@
 // Atlas India uses, so a decile means one thing on both boards the FM reads side by side.
 import Link from 'next/link'
 import { DecileChip } from '@/components/ui/DecileChip'
-import type { AssetClass, InstrumentRow } from '@/lib/facts'
+import { instrumentPath, type AssetClass, type InstrumentRow } from '@/lib/facts'
 import { formatDecimal, formatPct } from '@/lib/format'
 import { rsTint } from '@/lib/scores'
 
@@ -28,7 +28,7 @@ function Row({ r, assetClass, place }: { r: InstrumentRow; assetClass: AssetClas
     <li className="flex items-center gap-2 border-t border-hair px-3 py-1.5 first:border-t-0 hover:bg-raised">
       <span className="w-5 shrink-0 text-right font-num text-[11px] tabular-nums text-ink-3">{place}</span>
       <Link
-        href={`/${assetClass}s/${encodeURIComponent(r.symbol)}`}
+        href={instrumentPath(assetClass, r.symbol)}
         className="dt-symbol w-[52px] shrink-0 hover:underline"
       >
         {r.symbol}

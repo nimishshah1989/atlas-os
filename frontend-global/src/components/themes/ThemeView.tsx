@@ -34,7 +34,7 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
             Sectors
           </Link>
           <span className="px-1.5">/</span>
-          <Link href={`/sectors#${encodeURIComponent(row.sector_id)}`} className="hover:underline">
+          <Link href={`/sectors/${encodeURIComponent(row.sector_id)}`} className="hover:underline">
             {row.sector_name}
           </Link>
         </nav>
