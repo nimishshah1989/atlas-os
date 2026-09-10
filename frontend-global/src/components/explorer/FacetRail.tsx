@@ -3,7 +3,7 @@
 // facet group, native checkboxes (any of) or radios (one of), a tabular count beside each value.
 // Counts come from the explorer (the query and the other groups), so a value never hides its
 // alternatives; a value with no rows stays listed at 0 rather than vanishing.
-import { ALL, ON, type FacetGroup } from '@/lib/explorer'
+import { ALL, ON, visibleOptions, type FacetGroup } from '@/lib/explorer'
 import { words } from '@/lib/facts'
 import { formatNum } from '@/lib/format'
 
@@ -33,10 +33,15 @@ export function FacetRail<R>({ groups, values, counts, selected, onChange, onCle
               ? [ON]
               : (values[g.key] ?? [])
         const single = g.kind === 'one' || g.kind === 'min' || g.kind === 'max'
+        // Hide what the current selection has emptied; hide the rail when nothing is left.
+        // The rule and its reasons live in src/lib/explorer.ts, where they are tested.
+        const shown = visibleOptions(g.kind, options, counts[g.key], sel)
+        if (shown.length === 0) return null
+
         return (
           <fieldset key={g.key} className="facet">
             <legend className="facet-title text-meta">{g.label}</legend>
-            {options.map((v) => {
+            {shown.map((v) => {
               const checked = sel.includes(v)
               const label = g.labels?.[v] ?? (v === ALL ? 'All' : (g.format?.(v) ?? words(v)))
               return (

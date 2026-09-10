@@ -101,6 +101,43 @@ export function formatUsd(value: string | null | undefined, decimals = 2): strin
   return `${negative ? '-' : ''}$${group(int)}${frac ? '.' + frac : ''}`
 }
 
+/** A dollar amount as a COMPACT figure: "$129M", "$1.8B", "$13M", "$740K".
+ *
+ *  A column eight characters wide cannot hold "$129,145,821", and a table that ellipsises its own
+ *  numbers into "$129,1…" is worse than one that rounds: the reader can compare "$129M" against
+ *  "$1.8B" at a glance and cannot compare two truncations at all. The FM, on seeing it: "look at
+ *  these numbers and how they are getting cut. I can't even make sense of it."
+ *
+ *  Three significant figures below the thousand, two decimals at most, and NEVER a rounded zero
+ *  for a non-zero amount — "$0M" would claim a fund trades nothing. The full figure stays in the
+ *  cell's title, so nothing is lost, it is one hover away.
+ *
+ *  Rounding is on the DIGIT STRING via the same BigInt path as every other formatter here: a
+ *  NUMERIC that has never passed through a double cannot start doing so to be made shorter. */
+export function formatUsdCompact(value: string | null | undefined): string {
+  if (value == null || value === '') return '—'
+  const { negative, int } = roundDecimal(value, 0)
+  const digits = int.replace(/^0+(?=\d)/, '')
+  const sign = negative ? '-' : ''
+  const UNITS: [number, string][] = [
+    [13, 'T'],
+    [10, 'B'],
+    [7, 'M'],
+    [4, 'K'],
+  ]
+  for (const [width, suffix] of UNITS) {
+    if (digits.length >= width) {
+      // e.g. 129145821 (9 digits) at the "M" rung (width 7): three leading digits are the whole
+      // part, the next is the tenth. "129" + "" → $129M; "1845…" at the B rung → $1.8B.
+      const whole = digits.slice(0, digits.length - (width - 1))
+      const tenth = digits[digits.length - (width - 1)]
+      const frac = whole.length < 3 && tenth !== '0' ? `.${tenth}` : ''
+      return `${sign}$${whole}${frac}${suffix}`
+    }
+  }
+  return `${sign}$${group(digits)}`
+}
+
 /** A FRACTION (0.1234, as a NUMERIC string or a number) → "12.3%". `sign` prefixes "+" to gains. */
 export function formatPct(
   fraction: string | number | null | undefined,

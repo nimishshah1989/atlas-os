@@ -148,6 +148,34 @@ export function facetCounts<R extends Named>(rows: readonly R[], state: Explorer
   return out
 }
 
+/** The options a rail should still offer, given what the current selection has left.
+ *
+ *  AN OPTION NOBODY CAN CHOOSE IS NOISE. Filtering /etfs to thematic funds left the Country rail
+ *  showing forty markets at zero — the FM: "I have these filters on country, where most of the
+ *  countries are zero, only showing zero. Why do we even have that filter, right?"
+ *
+ *  Three rules, each with a reason:
+ *   * a TICKED option always stays, whatever its count — a filter you cannot untick is a trap;
+ *   * a SINGLE-CHOICE rail keeps its whole ladder, because a decile scale with rungs missing is
+ *     not a scale and a threshold rail's rungs are a unit, not a menu;
+ *   * everything else needs at least one row behind it.
+ *
+ *  Empty means the rail has nothing to offer and the caller renders none of it.
+ */
+export function visibleOptions(
+  kind: FacetGroup<never>['kind'],
+  options: readonly string[],
+  counts: Record<string, number> | undefined,
+  selected: readonly string[],
+): string[] {
+  const ladder = kind === 'one' || kind === 'min' || kind === 'max'
+  const keep = options.filter(
+    (v) => ladder || v === ALL || selected.includes(v) || (counts?.[v] ?? 0) > 0,
+  )
+  if (ladder) return keep
+  return keep.some((v) => (counts?.[v] ?? 0) > 0) ? keep : []
+}
+
 /** Every value a group takes over the full list, most frequent first (the `none` token last) —
  *  the rail's option list, fixed so options do not reorder as the counts move. */
 export function facetValues<R>(rows: readonly R[], g: FacetGroup<R>): string[] {

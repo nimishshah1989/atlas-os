@@ -19,7 +19,7 @@ import { DecileChip, LeaderMark } from '@/components/ui/DecileChip'
 import { DecileMeter } from '@/components/ui/DecileMeter'
 import { LensBar } from '@/components/ui/LensBar'
 import type { AssetClass, InstrumentRow } from '@/lib/facts'
-import { formatDecimal, formatPct, formatUsd } from '@/lib/format'
+import { formatDecimal, formatPct, formatUsd, formatUsdCompact } from '@/lib/format'
 import {
   lensesLabel,
   lensesShort,
@@ -199,7 +199,10 @@ type RsKey = 'rs_3m_spy' | 'rs_6m_spy' | 'rs_12m_spy'
 const rs = (key: RsKey, label: string): Column<InstrumentRow> => ({
   key,
   label,
-  width: 64,
+  // 64 px held "+8.4%" and ellipsised everything longer, so a column of relative strengths read
+  // "+8… +26… +47…" — the FM: "look at these numbers and how they are getting cut. I can't even
+  // make sense of it." A signed percentage with a tenth is up to seven characters ("+129.4%").
+  width: 82,
   align: 'right',
   title: `Relative strength vs SPY, ${label} — (1+r_fund)/(1+r_SPY) − 1, what is left after the index`,
   sortValue: (r) => orderBy(r[key]),
@@ -223,11 +226,18 @@ const POS_52W: Column<InstrumentRow> = {
 const ADV: Column<InstrumentRow> = {
   key: 'adv',
   label: 'ADV$',
-  width: 88,
+  width: 76,
   align: 'right',
   title: 'Median daily traded value over 60 sessions — the liquidity the universe floor is set on',
   sortValue: (r) => orderBy(r.adv_usd),
-  render: (r) => formatUsd(r.adv_usd, 0),
+  // COMPACT, and narrower than it was. "$129,145,821" needs about 85 px of text and was rendering
+  // as "$129,1…"; "$129M" needs 40 and can be compared against "$1.8B" at a glance, which two
+  // truncations cannot. The exact figure is the cell's own title, one hover away.
+  render: (r) => (
+    <span title={r.adv_usd == null ? undefined : formatUsd(r.adv_usd, 0)}>
+      {formatUsdCompact(r.adv_usd)}
+    </span>
+  ),
 }
 
 // ── the risk overlay (displayed, not blended) ───────────────────────────────
