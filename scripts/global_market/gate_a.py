@@ -346,18 +346,54 @@ def check_A(g: Gate, eod: Any = None, report: str | None = None) -> None:
             "all, so an unadjusted split reads as a price move; run ingest_prices.py --backfill "
             "(it is the only step that pulls action history) before treating these as bad prices"
         )
-    g.check(
-        f"no scored instrument moves more than {A_MAX_ABS_RET_1D:.0%} between consecutive "
-        "sessions on close_tr",
-        impossible.empty,
-        "none"
-        if impossible.empty
-        else f"{len(impossible)} row(s): "
-        + ", ".join(
-            f"{r['symbol']} {r['date']} ×{r['price_multiple']}"
-            for _, r in impossible.head(3).iterrows()
+    # SPLIT BY DATE, NOT BY KIND — the correction to how (4) and (6) were split on 2026-09-10.
+    #
+    # The argument that moved those two was "an archive scan must not withhold today's publish".
+    # This check scans the SAME ten-year archive, so it had the same defect, and on the first
+    # night after the split it was the one check still failing: fourteen impossible moves over
+    # twelve instruments — LAZR ×268 on 2026-06-30, SHLD ×70 on 2020-11-06, VOLT ×4.23 on
+    # 2024-12-04 — held the publish for 5,474 funds whose numbers were fine. Two of the twelve
+    # dates are in 2026; none is tonight.
+    #
+    # A move over 100 % in a session is not a price, and that judgement is unchanged. What
+    # changes is WHEN it is this run's problem. A bad bar ingested TONIGHT means tonight's
+    # numbers are wrong and the board must not advance onto them. The same bar in 2020 means
+    # ONE INSTRUMENT'S history is wrong; it was already wrong yesterday, it is already in
+    # ohlcv_daily, the board already reads it, and refusing to flush a cache does not unwrite
+    # it. So the anchor session ASSERTS and the archive REPORTS, and the twelve instruments get
+    # quarantined out of the universe rather than the whole board held hostage to them.
+    dates = pd.to_datetime(impossible["date"], errors="coerce") if len(impossible) else None
+    anchor_ts = pd.Timestamp(last) if last is not None else None
+    tonight = (
+        pd.DataFrame(impossible[dates == anchor_ts])
+        if dates is not None and anchor_ts is not None
+        else impossible.iloc[0:0]
+    )
+    archive = (
+        pd.DataFrame(impossible[dates != anchor_ts])
+        if dates is not None and anchor_ts is not None
+        else impossible
+    )
+
+    def _rows(frame: pd.DataFrame) -> str:
+        return ", ".join(
+            f"{r['symbol']} {r['date']} ×{r['price_multiple']}" for _, r in frame.head(3).iterrows()
         )
-        + diagnosis,
+
+    g.check(
+        f"no scored instrument moves more than {A_MAX_ABS_RET_1D:.0%} on close_tr INTO the "
+        f"anchor session ({last})",
+        tonight.empty,
+        "none" if tonight.empty else f"{len(tonight)} row(s): {_rows(tonight)}{diagnosis}",
+    )
+    g.report(
+        f"no scored instrument moves more than {A_MAX_ABS_RET_1D:.0%} on close_tr anywhere "
+        "earlier in the archive",
+        archive.empty,
+        "none"
+        if archive.empty
+        else f"{len(archive)} row(s) over {archive['symbol'].nunique()} instrument(s): "
+        f"{_rows(archive)}{diagnosis}",
     )
 
     # (4) large jumps. There is NO reliable automatic test that separates a missed split from

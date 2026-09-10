@@ -8,6 +8,13 @@ numbers are already in Postgres, the board reads Postgres directly, and publish 
 ``revalidateTag('eod')``, so withholding it hides nothing and freezes everyone ELSE's numbers.
 Gate A blocked on both from 2026-09-03 and the board went a week without advancing.
 
+THE LINE IS A DATE, NOT A KIND OF CHECK, and getting that wrong cost a second night. The first
+split moved two checks wholesale and left the impossible-move check blocking because a >100 %
+session move "cannot be a price" — true, and irrelevant to the question. That check scans the
+same archive, so it alone then held the publish for 5,474 healthy funds over twelve instruments
+whose newest bad print was months old. The same test now runs twice: on the anchor session it
+ASSERTS, and everywhere earlier it REPORTS. Both branches are pinned below.
+
 Nothing in the pipeline can catch a regression here: re-blocking the archive scan is a
 one-word edit, the gate still runs, the log still looks right, and the only symptom is a board
 that quietly stops moving — which is exactly how long it took to notice the first time. So the
@@ -32,12 +39,13 @@ BLOCKING = [
     "every scored instrument has bars",  # nothing to render at all
     "has an anchor bar at or before the EOD",  # no anchor session means no calendar
     "the newest session carries",  # tonight's completeness against last night's
-    "no scored instrument moves more than",  # a >100% daily move is not a price
+    "INTO the anchor session",  # a >100% move on the bar THIS run ingested
     "daily returns vs FRED",  # the anchor against an independent publisher
 ]
 REPORTING = [
     "log jump on close_adj",  # the ten-year archive scan (both branches)
     "no close_tr/close ratio falls further",  # re-basing seams, per instrument, in history
+    "anywhere earlier in the archive",  # the SAME >100% test, on sessions already past
 ]
 
 
