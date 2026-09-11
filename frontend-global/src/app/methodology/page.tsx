@@ -8,20 +8,26 @@ import { MethodologyBody } from '@/components/methodology/MethodologyBody'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { QueryFailed } from '@/components/ui/Section'
 import { requireUser } from '@/lib/auth'
-import { ETF_LENSES, getLensWeights } from '@/lib/queries/methodology'
+import { getLensWeights, getTierRules, type LensWeight } from '@/lib/queries/methodology'
 import { attempt } from '@/lib/result'
 
 export const metadata = { title: 'Methodology' }
 
+const STATE: Record<LensWeight['state'], { word: string; tone: string }> = {
+  computed: { word: 'computed · blended', tone: 'text-pos' },
+  partial: { word: 'partly computed · blended', tone: 'text-pos' },
+  overlay: { word: 'computed · overlay, weight 0', tone: 'text-warn' },
+  absent: { word: 'no producer yet — absent, not zero', tone: 'text-ink-3' },
+}
+
 export default async function MethodologyPage() {
   await requireUser()
-  const weights = await attempt(getLensWeights())
-  const active = weights.ok ? weights.value.filter((w) => w.has_producer) : []
+  const [weights, tiers] = await Promise.all([attempt(getLensWeights()), attempt(getTierRules())])
   return (
     <div className="page">
       <PageHeader
         title="Methodology"
-        lead="How a score on this board is built, what it is made of, and what it does not yet know."
+        lead="How a score on this board is built, what it is made of, and what it does not yet know. Open any section."
       />
 
       {weights.ok ? (
@@ -32,7 +38,7 @@ export default async function MethodologyPage() {
                 <th className="px-3 py-2 text-left font-medium">Lens</th>
                 <th className="px-3 py-2 text-right font-medium">Weight</th>
                 <th className="px-3 py-2 text-left font-medium">Reads</th>
-                <th className="px-3 py-2 text-left font-medium">State</th>
+                <th className="px-3 py-2 text-left font-medium">State today</th>
               </tr>
             </thead>
             <tbody>
@@ -44,11 +50,7 @@ export default async function MethodologyPage() {
                   </td>
                   <td className="px-3 py-2 text-table text-ink-2">{w.reads}</td>
                   <td className="px-3 py-2 text-table">
-                    {w.has_producer ? (
-                      <span className="text-pos">computed</span>
-                    ) : (
-                      <span className="text-ink-3">no data yet — absent, not zero</span>
-                    )}
+                    <span className={STATE[w.state].tone} title={w.note}>{STATE[w.state].word}</span>
                   </td>
                 </tr>
               ))}
@@ -59,10 +61,7 @@ export default async function MethodologyPage() {
         <QueryFailed error={weights.error} />
       )}
 
-      <MethodologyBody
-        activeLenses={active.map((w) => w.label.toLowerCase())}
-        totalLenses={ETF_LENSES.length}
-      />
+      {weights.ok && <MethodologyBody lenses={weights.value} tiers={tiers.ok ? tiers.value : []} />}
 
       <p className="mt-8 max-w-[70ch] text-meta text-ink-3">
         Every weight and cut point above is a row in the thresholds table, read on each run. This

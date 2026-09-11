@@ -2,6 +2,7 @@
 // (blank while ohlcv_daily holds no SPY bar — the row's note says so). Tolerance and tier come from
 // freshness_guard's registries through the writer; nothing here adds a threshold.
 import { formatNum, formatShortDateTime } from '@/lib/format'
+import { TABLES } from '@/lib/pipeline'
 import type { FreshnessRow, FreshnessSnapshot } from '@/lib/queries/health'
 
 /** fresh (green) · stale (red when it withholds publish, amber when warn-only) · no lag (grey/tier). */
@@ -27,6 +28,7 @@ export function FreshnessTable({ snapshot }: { snapshot: FreshnessSnapshot }) {
         <thead>
           <tr>
             <th>Table</th>
+            <th>What it holds · who writes it</th>
             <th className="r">Lag (sessions)</th>
             <th>State</th>
             <th>Note</th>
@@ -39,6 +41,15 @@ export function FreshnessTable({ snapshot }: { snapshot: FreshnessSnapshot }) {
             return (
               <tr key={r.table_name} data-freshness-row={r.table_name}>
                 <td className="text-ink">{r.table_name}</td>
+                <td className="max-w-[44ch] whitespace-normal text-ink-2">
+                  {TABLES[r.table_name] ? (
+                    <>
+                      {TABLES[r.table_name].holds} <span className="text-ink-3">· {TABLES[r.table_name].step}</span>
+                    </>
+                  ) : (
+                    <span className="text-ink-3">not in the catalogue — src/lib/pipeline.ts</span>
+                  )}
+                </td>
                 <td className="num r">{formatNum(r.value_today)}</td>
                 <td className={s.text}>
                   <span className="inline-flex items-center gap-2">
@@ -53,7 +64,7 @@ export function FreshnessTable({ snapshot }: { snapshot: FreshnessSnapshot }) {
           })}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={5} className="text-ink-3">
+              <td colSpan={6} className="text-ink-3">
                 No freshness rows yet. write_health_snapshot writes one per tracked table at the end of every
                 orchestrator run.
               </td>
