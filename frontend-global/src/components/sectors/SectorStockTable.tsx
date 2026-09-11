@@ -10,6 +10,7 @@
 // would rank Energy's mega-caps against Energy's mega-caps and print the result under a word that
 // already means something else.
 import Link from 'next/link'
+import { AddToDraft } from '@/components/portfolios/AddToDraft'
 import { useState } from 'react'
 import { DecileChip } from '@/components/ui/DecileChip'
 import { InfoTip } from '@/components/ui/InfoTip'
@@ -63,6 +64,7 @@ export function SectorStockTable({ rows }: { rows: readonly SectorStock[] }) {
               <th style={R}>vs S&P 12m</th>
               <th style={R}>200d</th>
               <th style={R}>ADV$</th>
+              <th style={{ ...R, textAlign: 'center' }} title="Add to a draft basket">+</th>
             </tr>
           </thead>
           <tbody>
@@ -103,6 +105,9 @@ export function SectorStockTable({ rows }: { rows: readonly SectorStock[] }) {
                   )}
                 </td>
                 <td className={`${NUM} text-ink-2`}>{formatUsdCompact(r.adv_usd)}</td>
+                <td className="px-2 py-1.5 text-center">
+                  <AddToDraft kind="stock" symbol={r.symbol} />
+                </td>
               </tr>
             ))}
           </tbody>

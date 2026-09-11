@@ -20,7 +20,7 @@ import { NOT_CAPTURED } from '@/lib/__tests__/laterColumns'
  *
  * Only the App Router surface Explorer reads (useSearchParams / usePathname) is stubbed.
  */
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { InstrumentExplorer } from '@/components/explorer/InstrumentExplorer'
 import { packRows, toInstrumentRow, UNIVERSE_LABEL, type InstrumentDbRow } from '@/lib/facts'
@@ -123,8 +123,9 @@ describe('the default view is the universe, not the directory', () => {
     const { container } = render(<InstrumentExplorer assetClass="etf" list={list(ETFS)} />)
     expect(symbols(container)).not.toContain('TQQQ')
     expect(symbols(container)).not.toContain('SH')
-    const geared = screen.getByRole('group', { name: 'Leveraged funds' })
-    expect(within(geared).getByRole('checkbox', { name: 'Include leveraged' })).not.toBeChecked()
+    // The flag is a toggle in the filter bar, off, with the count of rows it would let in.
+    const geared = screen.getByRole('button', { name: /Include leveraged/ })
+    expect(geared).toHaveAttribute('aria-pressed', 'false')
     expect(geared.textContent).toContain('1')
   })
 })
@@ -233,7 +234,9 @@ describe('a fund can be filtered by what it is a bet ON', () => {
 
   it('offers the theme as a facet, and names the no-theme case rather than leaving it blank', () => {
     render(<InstrumentExplorer list={list(THEMED)} assetClass="etf" />)
-    expect(screen.getByText('Theme')).toBeInTheDocument()
+    // A group is a button in the bar; its options open on demand.
+    const theme = screen.getByRole('button', { name: /^Theme/ })
+    fireEvent.click(theme)
     expect(screen.getByText('Nuclear & Uranium')).toBeInTheDocument()
     expect(screen.getByText('No theme in the name')).toBeInTheDocument()
   })
@@ -244,6 +247,6 @@ describe('a fund can be filtered by what it is a bet ON', () => {
         sector_gics: 'Information Technology', in_universe: true, universe_exclusion: null },
     ]
     render(<InstrumentExplorer list={list(stocks)} assetClass="stock" />)
-    expect(screen.queryByText('Theme')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Theme/ })).not.toBeInTheDocument()
   })
 })

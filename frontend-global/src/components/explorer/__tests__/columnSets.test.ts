@@ -43,7 +43,7 @@ describe('the lens view shows the lenses that market actually has', () => {
 
 describe('the cost view', () => {
   it('gives a fund its theme, its fee and its assets', () => {
-    expect(keys(ETF, true, 'cost')).toEqual(expect.arrayContaining(['theme_col', 'expense', 'aum', 'trend']))
+    expect(keys(ETF, true, 'cost')).toEqual(expect.arrayContaining(['theme_col', 'expense', 'aum', 'emas']))
   })
 
   it('gives a company NEITHER a fee NOR fund assets — a company has no expense ratio', () => {
@@ -51,7 +51,7 @@ describe('the cost view', () => {
     expect(k).not.toContain('expense')
     expect(k).not.toContain('aum')
     expect(k).not.toContain('theme_col')
-    expect(k).toContain('trend')
+    expect(k).toContain('emas')
   })
 })
 

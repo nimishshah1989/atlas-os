@@ -15,6 +15,7 @@
 import Link from 'next/link'
 import { formatDecimal, formatPct } from '@/lib/format'
 import { rsTint } from '@/lib/scores'
+import { rangeTint } from '@/lib/tone'
 
 export type RankItem = {
   id: string
@@ -26,15 +27,6 @@ export type RankItem = {
   rs: string | null
   /** The right-hand context: how many members, or which market. Never a number needing a unit. */
   meta: string | null
-}
-
-/** Positional shade against the population ON SCREEN, floored so the weakest row is still a row.
- *  No absolute band is invented here — every methodology cut lives in atlas_thresholds (rule #1). */
-function shade(score: string | null, best: number, worst: number): string | undefined {
-  if (score == null) return undefined
-  const width = best - worst
-  const share = width > 0 ? ((Number(score) - worst) / width) * 0.55 + 0.1 : 0.3
-  return `color-mix(in srgb, var(--color-pos) ${(share * 100).toFixed(0)}%, transparent)`
 }
 
 function Rows({ items, best, worst, from }: { items: RankItem[]; best: number; worst: number; from: number }) {
@@ -49,7 +41,7 @@ function Rows({ items, best, worst, from }: { items: RankItem[]; best: number; w
           {it.meta && <span className="shrink-0 font-num text-[11px] text-ink-3">{it.meta}</span>}
           <span
             className="w-[42px] shrink-0 rounded-tile px-1 py-px text-right font-display text-[12.5px] font-semibold tabular-nums text-ink"
-            style={{ background: shade(it.score, best, worst) }}
+            style={{ background: rangeTint(it.score, worst, best) }}
             title="Median member score, 0–100"
           >
             {it.score == null ? '—' : formatDecimal(it.score, 0)}

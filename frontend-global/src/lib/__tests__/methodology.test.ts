@@ -15,9 +15,20 @@ describe('the methodology lens list', () => {
 
   it('carries no weight of its own — weights come from the thresholds table', () => {
     for (const lens of ETF_LENSES) {
-      expect(Object.keys(lens)).toEqual(['lens', 'label', 'reads'])
+      // Identity, what it reads, and the producer's own account of its state. Never a number.
+      expect(Object.keys(lens)).toEqual(['lens', 'label', 'reads', 'state', 'note'])
       expect(JSON.stringify(lens)).not.toMatch(/0\.\d+/)
     }
+  })
+
+  it('states each lens’s condition today in one of four words, with a reason', () => {
+    for (const lens of ETF_LENSES) {
+      expect(['computed', 'partial', 'overlay', 'absent']).toContain(lens.state)
+      expect(lens.note.length).toBeGreaterThan(20)
+    }
+    // The two the board cannot blend today, by name — so a producer landing changes this test.
+    expect(ETF_LENSES.filter((l) => l.state === 'absent').map((l) => l.lens).sort()).toEqual(['flow', 'quality'])
+    expect(ETF_LENSES.find((l) => l.lens === 'risk')?.state).toBe('overlay')
   })
 
   it('says what each lens reads, so a reader can check the claim', () => {

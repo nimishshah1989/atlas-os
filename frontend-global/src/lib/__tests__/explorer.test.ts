@@ -16,6 +16,7 @@ import {
   serialiseState,
   sortRows,
   visibleOptions,
+  type ExplorerState,
   type FacetGroup,
   type SortState,
 } from '@/lib/explorer'
@@ -197,5 +198,42 @@ describe('an option nobody can choose is not offered', () => {
     const sparse = { '7': 3, '10': 1 }
     expect(visibleOptions('one', deciles, sparse, [])).toEqual(deciles)
     expect(visibleOptions('min', ['10000000', '50000000', ALL], {}, [])).toHaveLength(3)
+  })
+})
+
+// ── a radio whose options overlap ───────────────────────────────────────────
+//
+// "Above the 200-day" and "averages stacked" can both be true of one row, and the pulse counts it
+// under each. A `one` group with a `test` matches by predicate and counts per option — the same
+// cumulative reading a threshold ladder gives.
+describe('a predicate radio', () => {
+  const TREND: FacetGroup<InstrumentRow> = {
+    key: 'trend',
+    label: 'Trend',
+    kind: 'one',
+    value: (r) => (r.above_ema_200 === true ? 'above200' : 'none'),
+    test: (r, o) => (o === 'above200' ? r.above_ema_200 === true : o === 'stacked' ? r.emas_stacked === true : false),
+    options: ['above200', 'stacked'],
+    default: ALL,
+  }
+  // Three flag patterns over the real QQQ row: the rule is about the flags, not the fund.
+  const rows: InstrumentRow[] = [
+    { ...ROWS[0], symbol: 'A', above_ema_200: true, emas_stacked: true },
+    { ...ROWS[0], symbol: 'B', above_ema_200: true, emas_stacked: false },
+    { ...ROWS[0], symbol: 'C', above_ema_200: null, emas_stacked: null },
+  ]
+  const state = (v: string): ExplorerState => ({ q: '', facets: { trend: [v] }, sort: { key: 'symbol', dir: 'asc' } })
+
+  it('keeps every row the predicate accepts, whatever its value token says', () => {
+    expect(applyFilters(rows, state('above200'), [TREND]).map((r) => r.symbol)).toEqual(['A', 'B'])
+    expect(applyFilters(rows, state('stacked'), [TREND]).map((r) => r.symbol)).toEqual(['A'])
+    expect(applyFilters(rows, state(ALL), [TREND]).map((r) => r.symbol)).toEqual(['A', 'B', 'C'])
+  })
+
+  it('counts each option by how many rows it would keep, and an unmeasured row under none', () => {
+    const counts = facetCounts(rows, state(ALL), [TREND]).trend
+    expect(counts.above200).toBe(2)
+    expect(counts.stacked).toBe(1)
+    expect(counts[ALL]).toBe(3)
   })
 })

@@ -51,6 +51,10 @@ export type ResolvedInstrument = {
 
 export type Constituent = { instrument_id: string; symbol: string; weight_frac: string }
 
+/** One row the symbol box offers: the directory's own symbol and name, and whether the FM's
+ *  universe rules offer the instrument today (null while no snapshot has marked it). */
+export type Suggestion = { symbol: string; name: string | null; in_universe: boolean | null }
+
 export type Parsed = { ok: true; draft: ParsedDraft } | { ok: false; errors: string[] }
 export type Checked =
   | { ok: true; constituents: Constituent[]; notes: string[] }

@@ -6,9 +6,9 @@
 // without a NAV row; the detail page says "marking within 5 minutes" until then.
 import { redirect } from 'next/navigation'
 import { requireUser } from '@/lib/auth'
-import { checkResolved, parseDraft, type DraftInput, type FormState } from '@/lib/basketDraft'
+import { checkResolved, parseDraft, type DraftInput, type FormState, type Suggestion } from '@/lib/basketDraft'
 import { dbAvailable } from '@/lib/db'
-import { getBasketLimits, insertBasket, latestSession, resolveSymbols } from '@/lib/queries/baskets'
+import { getBasketLimits, insertBasket, latestSession, resolveSymbols, searchInstruments } from '@/lib/queries/baskets'
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -54,4 +54,11 @@ export async function createBasket(_prev: FormState, formData: FormData): Promis
     return fail([`The database refused the basket: ${message(e)}`])
   }
   redirect(`/portfolios/${id}`)
+}
+
+/** The symbol box's suggestions. Signed in, bounded, and nothing is written. */
+export async function suggestInstruments(q: string, kind: 'etf' | 'stock'): Promise<Suggestion[]> {
+  await requireUser()
+  if (!dbAvailable || (kind !== 'etf' && kind !== 'stock')) return []
+  return searchInstruments(String(q ?? '').slice(0, 24), kind)
 }

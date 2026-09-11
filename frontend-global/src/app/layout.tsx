@@ -3,6 +3,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import { DraftTray } from '@/components/portfolios/DraftTray'
 import { TopBar } from '@/components/shell/TopBar'
 
 // Atlas India's face, for the same reason it uses it: Inter's tabular figures line a return
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main id="main" className="main">
           {children}
         </main>
+        <DraftTray />
       </body>
     </html>
   )

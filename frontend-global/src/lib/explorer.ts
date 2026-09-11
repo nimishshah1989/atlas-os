@@ -25,6 +25,10 @@ export type FacetGroup<R> = {
   numeric?: (r: R) => number | null
   /** `one`, `min` and `max` groups: the radio's values (fixed by design, not scanned from rows) … */
   options?: string[]
+  /** `one` groups whose options OVERLAP — "above the 200-day" and "averages stacked" are both
+   *  true of the same row — match by predicate rather than by `value` equality, and their counts
+   *  are per option, like a threshold's: how many rows each choice would keep. */
+  test?: (r: R, option: string) => boolean
   /** … and the one selected when the URL says nothing. */
   default?: string
 }
@@ -115,7 +119,7 @@ function passes<R>(r: R, g: FacetGroup<R>, sel: string[]): boolean {
     if (v == null || !Number.isFinite(v) || !Number.isFinite(limit)) return false
     return g.kind === 'min' ? v >= limit : v <= limit
   }
-  if (g.kind === 'one') return sel[0] === ALL || g.value(r) === sel[0]
+  if (g.kind === 'one') return sel[0] === ALL || (g.test ? g.test(r, sel[0]) : g.value(r) === sel[0])
   return sel.includes(g.value(r))
 }
 
@@ -133,7 +137,9 @@ export function facetCounts<R extends Named>(rows: readonly R[], state: Explorer
   for (const g of groups) {
     const counts: Record<string, number> = {}
     let total = 0
-    const threshold = g.kind === 'min' || g.kind === 'max'
+    // Cumulative counting for a threshold ladder and for a predicate radio alike: the number
+    // beside each option is how many rows choosing it would KEEP.
+    const threshold = g.kind === 'min' || g.kind === 'max' || (g.kind === 'one' && g.test != null)
     for (const r of rows) {
       if (!matchesQuery(r, state.q)) continue
       if (!groups.every((o) => o === g || passes(r, o, state.facets[o.key] ?? []))) continue

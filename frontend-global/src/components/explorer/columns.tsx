@@ -14,12 +14,13 @@
 // at a lens nobody measured (rule #0) — and every composite is printed beside the count of lenses
 // it was actually built from, so a two-lens score cannot be read as a full one.
 import Link from 'next/link'
+import { AddToDraft } from '@/components/portfolios/AddToDraft'
 import { Chip } from '@/components/ui/Chip'
 import { DecileChip, LeaderMark } from '@/components/ui/DecileChip'
 import { DecileMeter } from '@/components/ui/DecileMeter'
 import { LensBar } from '@/components/ui/LensBar'
 import { instrumentPath, type AssetClass, type InstrumentRow } from '@/lib/facts'
-import { formatDecimal, formatPct, formatUsd, formatUsdCompact } from '@/lib/format'
+import { formatDecimal, formatPct, formatPctCompact, formatUsd, formatUsdCompact } from '@/lib/format'
 import {
   lensesLabel,
   lensesShort,
@@ -42,6 +43,7 @@ const symbol = (assetClass: AssetClass): Column<InstrumentRow> => ({
   key: 'symbol',
   label: 'Symbol',
   width: 72,
+  title: 'The ticker as listed. Opens the instrument’s own page: score tree, price history, holdings.',
   sortValue: (r) => r.symbol,
   render: (r) => (
     <Link href={instrumentPath(assetClass, r.symbol)} className="dt-symbol">
@@ -55,6 +57,7 @@ const NAME: Column<InstrumentRow> = {
   label: 'Name',
   width: 0,
   minWidth: 280,
+  title: 'The registered name from the listing feed — also the evidence the peer-group rules read.',
   sortValue: (r) => r.name,
   render: (r) => (
     <span className="text-ink" title={r.name ?? undefined}>
@@ -81,6 +84,7 @@ const SECTOR_COL: Column<InstrumentRow> = {
   key: 'sector',
   label: 'GICS sector',
   width: 150,
+  title: 'GICS level-1 sector from the index provider’s holdings file.',
   sortValue: (r) => r.sector,
   render: (r) => (r.sector ? <Chip>{r.sector}</Chip> : <span className="text-ink-3">—</span>),
 }
@@ -106,7 +110,10 @@ const COMPOSITE: Column<InstrumentRow> = {
   label: 'Composite',
   width: 124,
   align: 'right',
-  title: 'The blended score, 0–100, with its decile within the peer group',
+  title:
+    'The blended score, 0–100, and its decile within the peer group (10 = strongest tenth). ' +
+    'Only lenses that produced a score take part; an absent lens is not a zero.',
+  formula: 'Σ(weight × lens) ÷ Σ weight over the lenses present · decile = ntile(10) within peer group, on the score date',
   sortValue: (r) => orderBy(r.composite),
   // One em dash, not two: an unscored row says "nothing here" once. The chip joins the numeral
   // only when there is a rank to show, because a decile without a composite is not a thing.
@@ -152,10 +159,11 @@ const lenses = (ctx: ColumnContext): Column<InstrumentRow> => ({
   key: 'lenses',
   label: 'Lenses',
   width: 70,
-  align: 'right',
+  align: 'center',
   // COUNTED, never asserted: this used to say "four of five have no producer yet", which was true
   // the week it was written and wrong the week a lens landed. The denominator is the weight table's.
-  title: `How many of the blend’s ${ctx.lensTotal} lenses this composite was built from.`,
+  title: `How many of the blend’s ${ctx.lensTotal} lenses this composite was built from. A lens with weight 0 is an overlay and is not counted, even when it scored.`,
+  formula: 'lenses present with weight > 0 ÷ lenses the weight table names',
   sortValue: (r) => r.lenses_active,
   render: (r) => (
     <span className={r.lenses_active == null ? 'text-ink-3' : 'text-ink-2'} title={lensesLabel(r.lenses_active, ctx.lensTotal)}>
@@ -168,7 +176,8 @@ const technical = (ctx: ColumnContext): Column<InstrumentRow> => ({
   key: 'technical',
   label: 'Technical',
   width: 96,
-  title: 'The technical lens, 0–100: trend, relative strength vs SPY, relative strength vs peers, structure',
+  title: 'The technical lens, 0–100, and its share of the blend as the bar. Four sub-scores, each 0–25.',
+  formula: 'mean(trend, RS vs SPY over 3/6/12m, 6m return’s percentile within the peer group, EMA 21/50/200 structure) × 4',
   sortValue: (r) => orderBy(r.technical),
   render: (r) => (
     <span className="flex items-center gap-2">
@@ -202,15 +211,18 @@ const rs = (key: RsKey, label: string): Column<InstrumentRow> => ({
   // 64 px held "+8.4%" and ellipsised everything longer, so a column of relative strengths read
   // "+8… +26… +47…" — the FM: "look at these numbers and how they are getting cut. I can't even
   // make sense of it." A signed percentage with a tenth is up to seven characters ("+129.4%").
-  width: 82,
+  width: 84,
   align: 'right',
-  title: `Relative strength vs SPY, ${label} — (1+r_fund)/(1+r_SPY) − 1, what is left after the index`,
+  title: `Relative strength against SPY over ${label.slice(3)}: what is left after the index is taken out. +8% means it beat SPY by eight points, not that it rose eight percent. Tint saturates at ±20.`,
+  formula: '(1 + r_fund) ÷ (1 + r_SPY) − 1, calendar-anchored window',
   sortValue: (r) => orderBy(r[key]),
   cellStyle: (r) => {
     const background = rsTint(r[key])
     return background ? { background } : undefined
   },
-  render: (r) => formatPct(r[key], 1, { sign: true }),
+  // Compact past ±100% so an extreme reading prints whole rather than ellipsised; the exact
+  // figure is the cell's title.
+  render: (r) => <span title={r[key] == null ? undefined : formatPct(r[key], 2, { sign: true })}>{formatPctCompact(r[key], 1, { sign: true })}</span>,
 })
 
 const POS_52W: Column<InstrumentRow> = {
@@ -218,7 +230,8 @@ const POS_52W: Column<InstrumentRow> = {
   label: '52w',
   width: 54,
   align: 'right',
-  title: 'Position in the 52-week range, 0 to 100',
+  title: 'Where the close sits in its own 52-week range: 100 is at the high, 0 at the low.',
+  formula: '(close − 52w low) ÷ (52w high − 52w low) × 100',
   sortValue: (r) => orderBy(r.pos_52w),
   render: (r) => formatDecimal(r.pos_52w, 0),
 }
@@ -228,7 +241,8 @@ const ADV: Column<InstrumentRow> = {
   label: 'ADV$',
   width: 76,
   align: 'right',
-  title: 'Median daily traded value over 60 sessions — the liquidity the universe floor is set on',
+  title: 'Traded value a day — the liquidity the universe floor is set on, and the disc size on the map. Median, so one block trade does not move it.',
+  formula: 'median(close × volume) over the last 60 sessions',
   sortValue: (r) => orderBy(r.adv_usd),
   // COMPACT, and narrower than it was. "$129,145,821" needs about 85 px of text and was rendering
   // as "$129,1…"; "$129M" needs 40 and can be compared against "$1.8B" at a glance, which two
@@ -245,12 +259,13 @@ const ADV: Column<InstrumentRow> = {
 const VOL: Column<InstrumentRow> = {
   key: 'vol',
   label: 'Vol',
-  width: 62,
+  width: 66,
   align: 'right',
   divider: true,
-  title: 'Annualised volatility over 252 sessions. Risk is an OVERLAY: shown, not blended, until the FM sets its weight.',
+  title: 'Annualised volatility of daily returns over the last 252 sessions. Risk is an OVERLAY: shown beside the score, not blended into it, until the FM sets its weight.',
+  formula: 'stdev(daily returns, 252 sessions) × √252',
   sortValue: (r) => orderBy(r.vol_ann),
-  render: (r) => formatPct(r.vol_ann, 0),
+  render: (r) => <span title={r.vol_ann == null ? undefined : formatPct(r.vol_ann, 1)}>{formatPctCompact(r.vol_ann, 0)}</span>,
 }
 
 const MDD: Column<InstrumentRow> = {
@@ -258,10 +273,23 @@ const MDD: Column<InstrumentRow> = {
   label: 'Max DD',
   width: 70,
   align: 'right',
-  title: 'Deepest peak-to-trough fall over 12 months',
+  title: 'The deepest peak-to-trough fall in the close over the last 252 sessions — what a holder lived through at the worst moment.',
+  formula: 'min over the window of (close ÷ running peak − 1)',
   sortValue: (r) => orderBy(r.mdd_12m),
   render: (r) => formatPct(r.mdd_12m, 0),
 }
+
+/** The "+": into the draft basket, from any row. Last in every view so the sticky symbol column
+ *  and the ranking read as before; the tray at the foot of the page does the rest. */
+const add = (assetClass: AssetClass): Column<InstrumentRow> => ({
+  key: 'add',
+  label: '+',
+  width: 40,
+  align: 'center',
+  title: 'Add this instrument to a draft basket. The tray at the foot of the page opens the builder with everything you have picked.',
+  sortValue: () => null,
+  render: (r) => <AddToDraft kind={assetClass} symbol={r.symbol} />,
+})
 
 /** The universe verdict, shown only once the reader has asked for everything listed. */
 export const universeColumn = (label: (r: InstrumentRow) => string): Column<InstrumentRow> => ({
@@ -314,7 +342,7 @@ const AUM: Column<InstrumentRow> = {
   label: 'Assets',
   width: 76,
   align: 'right',
-  title: 'Fund assets under management, with its as-of date on the fund’s own page',
+  title: 'Fund assets under management from the issuer’s filing, with its as-of date on the fund’s own page. Blank where the filed figure is the whole series and not this share class.',
   sortValue: (r) => orderBy(r.aum_usd),
   render: (r) => (
     <span title={r.aum_usd == null ? undefined : formatUsd(r.aum_usd, 0)}>
@@ -323,48 +351,86 @@ const AUM: Column<InstrumentRow> = {
   ),
 }
 
-const TREND: Column<InstrumentRow> = {
-  key: 'trend',
-  label: '200d',
-  width: 52,
-  align: 'right',
+/** One average's flag as a glyph: above, below, or not yet measurable. The glyph and the colour
+ *  say the same thing twice, so the column reads in greyscale. */
+function Ema({ above, period }: { above: boolean | null; period: number }) {
+  if (above == null) {
+    return (
+      <span className="text-ink-3" title={`Fewer than ${period} sessions — no ${period}-day average yet`}>
+        ·
+      </span>
+    )
+  }
+  return (
+    <span style={{ color: above ? 'var(--color-pos)' : 'var(--color-neg)' }} title={`${above ? 'Above' : 'Below'} its ${period}-day average`}>
+      {above ? '▲' : '▼'}
+    </span>
+  )
+}
+
+const EMA_PERIODS = [21, 50, 200] as const
+
+const EMA_STACK: Column<InstrumentRow> = {
+  key: 'emas',
+  label: 'EMA 21·50·200',
+  width: 104,
+  align: 'center',
   title:
-    'Above its own 200-day average. Blank means the instrument has fewer than 200 sessions — ' +
-    'it has not FAILED a test nobody could run on it (rule #0).',
-  sortValue: (r) => (r.above_ema_200 == null ? null : r.above_ema_200 ? 1 : 0),
-  render: (r) =>
-    r.above_ema_200 == null ? (
-      <span className="text-ink-3" title="Fewer than 200 sessions">
-        —
-      </span>
-    ) : (
-      // The glyph and the colour say the same thing twice, so the column reads in greyscale.
-      <span style={{ color: r.above_ema_200 ? 'var(--color-pos)' : 'var(--color-neg)' }}>
-        {r.above_ema_200 ? '▲' : '▼'}
-      </span>
-    ),
+    'Is the close above its 21-, 50- and 200-day exponential averages, in that order. Three up is the ' +
+    'full uptrend shape the pulse counts as "averages stacked up"; a dot means the instrument has ' +
+    'fewer sessions than the average needs — it has not FAILED a test nobody could run on it.',
+  formula: 'close > EMA(n) for n = 21, 50, 200 · sorted by how many are up',
+  // Sorted by how many are up; a row with nothing measurable falls to the bottom either way.
+  sortValue: (r) => {
+    const flags = [r.above_ema_21, r.above_ema_50, r.above_ema_200]
+    if (flags.every((f) => f == null)) return null
+    return flags.filter((f) => f === true).length
+  },
+  render: (r) => (
+    <span className="inline-flex items-center gap-1.5 text-[12px] leading-none">
+      {EMA_PERIODS.map((p) => (
+        <Ema key={p} period={p} above={r[`above_ema_${p}` as const]} />
+      ))}
+    </span>
+  ),
 }
 
 // ── every lens the blend carries, side by side ──────────────────────────────
 
 /** One lens as a 0–100 number with its own decile behind it. The FM, on two funds an inch apart
  *  on composite: the lens columns are what says one is cheap and liquid and the other is not. */
-const lensColumn = (key: 'risk' | 'cost_liquidity' | 'flow' | 'quality' | 'fundamental' | 'valuation' | 'catalyst', label: string, title: string): Column<InstrumentRow> => ({
+const lensColumn = (
+  key: 'risk' | 'cost_liquidity' | 'flow' | 'quality' | 'fundamental' | 'valuation' | 'catalyst',
+  label: string,
+  title: string,
+  formula?: string,
+): Column<InstrumentRow> => ({
   key: `lens_${key}`,
   label,
   width: 66,
   align: 'right',
   title,
+  formula,
   sortValue: (r) => orderBy(r[key]),
   // Null renders as an em dash, never 0: a fund is not bad at a lens nobody measured (rule #0).
   render: (r) => formatDecimal(r[key], 0),
 })
 
 const ETF_LENS_COLUMNS = [
-  lensColumn('risk', 'Risk', 'Volatility, drawdown and beta within the asset group. An OVERLAY: displayed, not blended.'),
-  lensColumn('cost_liquidity', 'Cost', 'Expense ratio, traded value, assets and concentration, each as a percentile within the asset group.'),
-  lensColumn('flow', 'Flow', 'Change in shares outstanding — creations and redemptions — centred at 50.'),
-  lensColumn('quality', 'Quality', 'The holdings looked through to their own stock scores. Present only where enough of the fund is scoreable.'),
+  lensColumn(
+    'risk',
+    'Risk',
+    'How calm the fund is against the other funds in its asset group: volatility, drawdown and downside deviation as quintiles (1 = calmest), plus a beta band against SPY. Carries weight 0 today — an OVERLAY, displayed and not blended.',
+    'mean(vol quintile, drawdown quintile, downside quintile, beta band) × 4',
+  ),
+  lensColumn(
+    'cost_liquidity',
+    'Cost',
+    'What it costs to hold and how easily it trades: a traded-value band, the expense ratio’s percentile, an assets band and top-10 concentration. A sub-score with no data is left out of the mean, not scored zero.',
+    'mean of the present sub-scores (ADV$ band, expense percentile, AUM band, top-10 weight) × 4',
+  ),
+  lensColumn('flow', 'Flow', 'Change in shares outstanding — creations and redemptions — centred at 50. No producer yet: blank everywhere, never zero.'),
+  lensColumn('quality', 'Quality', 'The holdings looked through to their own stock scores. No producer yet: blank everywhere, never zero.'),
 ]
 
 const STOCK_LENS_COLUMNS = [
@@ -377,7 +443,7 @@ const STOCK_LENS_COLUMNS = [
 // ── the column sets ─────────────────────────────────────────────────────────
 
 const SCORE_COLUMNS = (ctx: ColumnContext) => [COMPOSITE, CONVICTION, lenses(ctx), technical(ctx)]
-const PRICE_COLUMNS = [rs('rs_3m_spy', 'RS 3m'), rs('rs_6m_spy', 'RS 6m'), rs('rs_12m_spy', 'RS 12m'), POS_52W, ADV]
+const PRICE_COLUMNS = [rs('rs_3m_spy', 'RS 3m'), rs('rs_6m_spy', 'RS 6m'), rs('rs_12m_spy', 'RS 12m'), EMA_STACK, POS_52W, ADV]
 const RISK_COLUMNS = [VOL, MDD]
 
 /** WHICH QUESTION THE TABLE IS ANSWERING RIGHT NOW.
@@ -401,7 +467,7 @@ export const VIEW_LABEL: Record<BoardView, string> = {
 export const VIEW_NOTE: Record<BoardView, string> = {
   ranking: 'The score, what it is made of, and the price evidence behind it.',
   lenses: 'Every lens side by side — where two near-identical scores actually differ.',
-  cost: 'What it is a bet on, what it costs to hold, how big it is and whether it is trending.',
+  cost: 'What it is a bet on, what it costs to hold, how big it is and where it sits against its averages.',
 }
 
 export function isBoardView(v: string | null | undefined): v is BoardView {
@@ -414,19 +480,21 @@ export function boardColumns(ctx: ColumnContext, scored: boolean, view: BoardVie
   const etf = ctx.assetClass === 'etf'
   const identity = etf ? [symbol('etf'), NAME, PEER] : [symbol('stock'), NAME, SECTOR_COL, COHORT]
 
+  const plus = add(ctx.assetClass)
+
   // Nothing scored: the lens view has nothing to show, so it falls back rather than rendering a
   // grid of dashes the reader has to interpret.
-  if (!scored) return [...identity, ...PRICE_COLUMNS, ...RISK_COLUMNS]
+  if (!scored) return [...identity, ...PRICE_COLUMNS, ...RISK_COLUMNS, plus]
 
   if (view === 'lenses') {
-    return [...identity, COMPOSITE, lenses(ctx), technical(ctx), ...(etf ? ETF_LENS_COLUMNS : STOCK_LENS_COLUMNS)]
+    return [...identity, COMPOSITE, lenses(ctx), technical(ctx), ...(etf ? ETF_LENS_COLUMNS : STOCK_LENS_COLUMNS), plus]
   }
   if (view === 'cost') {
     // A company has no expense ratio and no fund assets, so on the stock board this view is what
     // it can honestly be: the sector, the trend and the liquidity.
     return etf
-      ? [...identity, COMPOSITE, THEME_COL, EXPENSE, AUM, ADV, TREND, POS_52W]
-      : [...identity, COMPOSITE, ADV, TREND, POS_52W, VOL, MDD]
+      ? [...identity, COMPOSITE, THEME_COL, EXPENSE, AUM, ADV, EMA_STACK, POS_52W, plus]
+      : [...identity, COMPOSITE, ADV, EMA_STACK, POS_52W, VOL, MDD, plus]
   }
-  return [...identity, ...SCORE_COLUMNS(ctx), ...PRICE_COLUMNS, ...RISK_COLUMNS]
+  return [...identity, ...SCORE_COLUMNS(ctx), ...PRICE_COLUMNS, ...RISK_COLUMNS, plus]
 }

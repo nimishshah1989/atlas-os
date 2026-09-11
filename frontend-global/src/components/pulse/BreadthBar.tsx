@@ -8,6 +8,7 @@
 //
 // Colour is the second channel: over half is the positive token, under half the negative, and the
 // number is always printed beside it.
+import Link from 'next/link'
 import { formatNum } from '@/lib/format'
 
 export function BreadthBar({
@@ -15,17 +16,28 @@ export function BreadthBar({
   count,
   measured,
   note,
+  href,
 }: {
   label: string
   count: number
   /** How many rows carry the measure. Zero means nobody could be asked — not "none of them". */
   measured: number
   note?: string
+  /** The board, filtered to exactly the rows this bar counts. The FM: "if I click, that should
+   *  automatically just filter out and open those." */
+  href?: string
 }) {
+  const name = href ? (
+    <Link href={href} className="text-meta text-ink-2 hover:text-ink hover:underline" title={`Open the ${formatNum(count)} on the board`}>
+      {label} →
+    </Link>
+  ) : (
+    <span className="text-meta text-ink-2">{label}</span>
+  )
   if (measured === 0) {
     return (
       <div className="grid grid-cols-[11rem_1fr_5.5rem] items-center gap-2">
-        <span className="text-meta text-ink-2">{label}</span>
+        {name}
         <span className="text-meta text-ink-3">not measured on any member yet</span>
         <span className="num text-right text-meta text-ink-3">—</span>
       </div>
@@ -35,7 +47,7 @@ export function BreadthBar({
   const tone = share >= 0.5 ? 'var(--color-pos)' : 'var(--color-neg)'
   return (
     <div className="grid grid-cols-[11rem_1fr_5.5rem] items-center gap-2" title={note}>
-      <span className="text-meta text-ink-2">{label}</span>
+      {name}
       <span className="h-2.5 rounded-sm bg-inset">
         <span className="block h-2.5 rounded-sm" style={{ width: `${(share * 100).toFixed(1)}%`, background: tone }} />
       </span>

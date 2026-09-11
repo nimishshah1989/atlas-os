@@ -5,6 +5,7 @@ import { AnomaliesTable } from '@/components/health/AnomaliesTable'
 import { FreshnessTable } from '@/components/health/FreshnessTable'
 import { HealthStatus } from '@/components/health/HealthStatus'
 import { NoDatabase } from '@/components/health/NoDatabase'
+import { PipelineGuide } from '@/components/health/PipelineGuide'
 import { PipelineRunsTable } from '@/components/health/PipelineRunsTable'
 import { ProviderCallsTable } from '@/components/health/ProviderCallsTable'
 import { ValidatorScorecard } from '@/components/health/ValidatorScorecard'
@@ -71,6 +72,10 @@ export default async function HealthPage() {
       />
 
       <HealthStatus latest={latest} recent={recent} validators={validators} anomalies={anomalies} />
+
+      <Section title="What runs, when, and what it means" note="the nightly and the weekly, step by step">
+        {latest.ok ? <PipelineGuide latest={latest.value} /> : <QueryFailed error={latest.error} />}
+      </Section>
 
       <Section title="Latest run per script">
         {latest.ok ? (

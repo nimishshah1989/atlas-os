@@ -13,7 +13,7 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { NOT_CAPTURED } from '@/lib/__tests__/laterColumns'
-import { StrengthRiskBubble } from '@/components/explorer/StrengthRiskBubble'
+import { StrengthRiskBubble, yDomain } from '@/components/explorer/StrengthRiskBubble'
 import { toInstrumentRow, type InstrumentDbRow, type InstrumentRow } from '@/lib/facts'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
@@ -84,5 +84,51 @@ describe('the map plots what was measured and says what it left out', () => {
     expect(r('SPY')).toBeGreaterThan(r('IWM'))
     expect(r('IWM')).toBeGreaterThan(r('IBTQ'))
     expect(r('IBTQ')).toBeGreaterThanOrEqual(3)
+  })
+})
+
+/**
+ * The axis rule is arithmetic over a list of numbers, so it is tested as arithmetic: the values
+ * below are not market data and claim to be none. What the rule must do — leave a long tail on the
+ * scale, cut a broken one — is stated in the names.
+ */
+describe('yDomain — the scale belongs to the cohort, not to its worst row', () => {
+  it('leaves a small cohort alone: a percentile of six numbers is not evidence', () => {
+    const vols = ROWS.filter((r) => r.vol_ann != null).map((r) => Number(r.vol_ann))
+    expect(yDomain(vols)).toEqual({ max: Math.max(...vols), cut: null })
+  })
+
+  it('keeps a long tail on the scale — a fund at three times the median is a fund, not a defect', () => {
+    const cohort = Array.from({ length: 200 }, (_, i) => 0.08 + (i / 199) * 0.5) // 8% … 58%
+    const d = yDomain(cohort)
+    expect(d.cut).toBeNull()
+    expect(d.max).toBeCloseTo(0.58)
+  })
+
+  it('cuts a pathological tail and reports where it cut', () => {
+    const cohort = Array.from({ length: 200 }, (_, i) => 0.08 + (i / 199) * 0.5)
+    const d = yDomain([...cohort, 300]) // the 30,000%-a-year row of 2026-09-10
+    expect(d.cut).not.toBeNull()
+    expect(d.max).toBeLessThan(1)
+    expect(d.max).toBeGreaterThan(0.5)
+    // the cut is the same number as the new top of the axis
+    expect(d.cut).toBe(d.max)
+  })
+
+  it('does not cut when the maximum is merely the largest, not far beyond the rest', () => {
+    const cohort = Array.from({ length: 200 }, (_, i) => 0.08 + (i / 199) * 0.5)
+    expect(yDomain([...cohort, 0.7]).cut).toBeNull()
+  })
+
+  it('answers zero for nothing', () => {
+    expect(yDomain([])).toEqual({ max: 0, cut: null })
+  })
+})
+
+describe('the real six funds are all on the scale', () => {
+  it('pins none of them and says nothing about a cut', () => {
+    const c = draw(ROWS)
+    expect(c.querySelectorAll('circle[data-pinned]')).toHaveLength(0)
+    expect(c.textContent).not.toContain('off the scale')
   })
 })

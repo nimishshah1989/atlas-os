@@ -19,11 +19,11 @@ const QUERY_BUDGET_MS = 12_000
 // The seed only fills the form; every symbol, every weight and the Σ=1 rule are checked again by
 // the action against instrument_master and the FM's thresholds, so a hand-edited URL can open a
 // form the action then refuses, and never write a basket nobody validated.
-type Params = { searchParams: Promise<{ symbols?: string; name?: string }> }
+type Params = { searchParams: Promise<{ symbols?: string; name?: string; kind?: string }> }
 
 export default async function NewBasketPage({ searchParams }: Params) {
   await requireUser()
-  const { symbols, name } = await searchParams
+  const { symbols, name, kind } = await searchParams
   const seed = seedRows(symbols)
   if (!dbAvailable) return <NoDatabase title="New basket" />
   const [limits, session] = await Promise.all([
@@ -56,6 +56,7 @@ export default async function NewBasketPage({ searchParams }: Params) {
           session={session.ok ? session.value : null}
           seed={seed.length ? seed : undefined}
           seedName={name?.slice(0, 80)}
+          seedKind={kind === 'stock' ? 'stock' : kind === 'etf' ? 'etf' : undefined}
         />
       ) : (
         <QueryFailed error={limits.ok ? 'thresholds unavailable' : limits.error} />

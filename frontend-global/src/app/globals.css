@@ -217,9 +217,13 @@
 
   /* ── tables ──────────────────────────────────────────────────────────────────────────── */
   .tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-  /* every table head in a panel, the countries grid's included: the desk's small uppercase */
+  /* every table head in a panel, the countries grid's included: the desk's small uppercase.
+     A HEADER SITS WHERE ITS COLUMN SITS. This used to centre every header over cells that were
+     left- or right-aligned, so no label lined up with anything beneath it — "font and numbers are
+     not aligned", on every table. Words are left, magnitudes are right (`.r`), tokens are centred
+     (`.c`); the header carries the same class as its cells and lands on the same edge. */
   .tbl th, .dt-table th, .panel table th {
-    background: var(--color-panel-solid); text-align: center;
+    background: var(--color-panel-solid); text-align: left;
     text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; font-weight: 600;
     color: var(--color-muted); border-bottom: 1px solid var(--color-line);
     white-space: nowrap; padding: 9px 12px;
@@ -230,6 +234,7 @@
   .tbl tbody tr:last-child td { border-bottom: 0; }
   .tbl tbody tr:hover td { background: var(--color-tint-info); }
   .tbl .r { text-align: right; }
+  .tbl .c, .dt-table th.c, .dt-table td.c { text-align: center; }
   .tbl td .sub, .dt-table td .sub { color: var(--color-muted); margin-left: 4px; font-size: 11px; }
   .tbl tfoot td, .dt-table tfoot td { background: var(--color-panel); border-top: 2px solid var(--color-line); font-weight: 650; }
   /* a section row across the table, its left edge coloured by state */
@@ -295,9 +300,11 @@
   .dot-warn { background: var(--color-amber); }
   .dot-grey { background: var(--color-muted); }
 
-  /* ── explorer: facet rail 260 px + the virtualised table ─────────────────────────────── */
+  /* ── explorer: the filter bar over the virtualised table ─────────────────────────────── */
   .page-wide { max-width: none; }
-  .explorer { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+  /* ONE COLUMN. The 260 px rail this grid used to reserve is gone: the filters are a row above
+     the table (FacetBar), and the table has the width. */
+  .explorer { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
 
   .notice {
     display: flex; align-items: baseline; gap: 10px;
@@ -307,23 +314,38 @@
   }
   .notice .dot { position: relative; top: -1px; }
 
-  /* each facet group is a row of chips; a chosen value is a chip that is .on */
-  .facets { display: flex; flex-direction: column; gap: 18px; padding-top: 30px; }
-  .facet { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
-  .facet-title {
-    display: block; width: 100%; padding: 0 0 2px;
-    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--color-muted);
+  /* the bar: one button per group, its current value in the label; a flag is a toggle */
+  .facetbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .facet-group { position: relative; }
+  .facet-btn {
+    display: inline-flex; align-items: center; gap: 5px; max-width: 260px;
+    padding: 4px 9px 4px 10px; border: 1px solid var(--color-line); border-radius: 20px;
+    background: var(--color-panel); color: var(--color-ink-2); cursor: pointer; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .facet-btn:hover { border-color: var(--color-muted); color: var(--color-ink); }
+  .facet-btn.on { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
+  .facet-btn.open { border-color: var(--color-accent); }
+  .facet-btn-glyph { font-size: 10px; color: var(--color-muted); }
+  .facet-btn.on .facet-btn-glyph { color: inherit; }
+  .facet-btn-n { font-size: 10.5px; color: var(--color-muted); }
+  /* the popover: the group's options, on the panel surface, under its button */
+  .facet-pop {
+    position: absolute; left: 0; top: calc(100% + 4px); z-index: 30;
+    display: flex; flex-direction: column; gap: 2px; margin: 0;
+    min-width: 220px; max-width: 320px; max-height: 60vh; overflow-y: auto;
+    padding: 6px; box-shadow: var(--shadow-panel);
   }
   .facet-opt {
-    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
-    padding: 3px 10px 3px 8px; border: 1px solid var(--color-line); border-radius: 20px;
-    background: var(--color-ground); color: var(--color-ink); cursor: pointer;
+    display: flex; align-items: center; gap: 8px; max-width: 100%;
+    padding: 4px 8px; border-radius: 8px; color: var(--color-ink); cursor: pointer;
   }
-  .facet-opt:hover { border-color: var(--color-muted); }
-  .facet-opt.is-on { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
-  .facet-opt input { margin: 0; width: 12px; height: 12px; accent-color: var(--color-accent); }
-  .facet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facet-opt:hover { background: var(--color-raised); }
+  .facet-opt.is-on { background: var(--color-accent-soft); color: var(--color-accent); font-weight: 600; }
+  .facet-opt input { margin: 0; width: 12px; height: 12px; flex: none; accent-color: var(--color-accent); }
+  .facet-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .facet-n { color: var(--color-muted); font-size: 11px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
   /* SIDEWAYS ONLY. The page scrolls as one document (DataTable windows over the viewport), so
      this box never owns a vertical scrollport — a wide matrix scrolls under the cursor and
@@ -341,6 +363,24 @@
   }
   .dt-table th.r .dt-sort { flex-direction: row-reverse; }
   .dt-sort:hover, .dt-table th[aria-sort] .dt-sort { color: var(--color-ink); }
+  /* a header with something to say is dotted underneath — the desk's convention for "hover me" */
+  .dt-sort.has-tip > span:first-child { text-decoration: underline dotted; text-decoration-color: var(--color-edge-strong); text-underline-offset: 3px; }
+  /* THE HEADER'S HOVER CARD: one element, fixed to the viewport so the sideways-scrolling table
+     cannot clip it. Label, what the column measures, then the formula if there is one. */
+  .dt-tip {
+    position: fixed; z-index: 60; width: 300px; max-width: calc(100vw - 24px);
+    padding: 10px 12px; border-radius: var(--radius-tile);
+    border: 1px solid var(--color-edge-rule); background: var(--color-surface-raised);
+    box-shadow: var(--shadow-panel); color: var(--color-txt-2);
+    font-size: 11.5px; line-height: 1.55; font-weight: 400; letter-spacing: normal;
+    text-transform: none; text-align: left; white-space: normal; pointer-events: none;
+  }
+  .dt-tip-label { display: block; margin-bottom: 3px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-txt-3); }
+  .dt-tip-body { display: block; }
+  .dt-tip-formula {
+    display: block; margin-top: 6px; padding: 4px 7px; border-radius: 6px;
+    background: var(--color-surface-inset); color: var(--color-txt-1); font-size: 11px; font-weight: 500;
+  }
   /* ROWS ARE 44 PX (DataTable's ROW_HEIGHT): the height is set outright, so the 9 px padding
      never changes it */
   .dt-table td {
@@ -357,6 +397,53 @@
   .dt-table .dt-spacer td { height: auto; padding: 0; border: 0; background: transparent; }
   .dt-table .dt-empty { height: auto; padding: 16px 12px; white-space: normal; }
   .dt-symbol { font-weight: 600; color: var(--color-ink); }
+
+  /* ── /methodology's folds: a claim on one line, the rule behind it on request ── */
+  .fold { padding: 0; }
+  .fold-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 14px; cursor: pointer; list-style: none; }
+  .fold-summary::-webkit-details-marker { display: none; }
+  .fold-summary::after { content: "▾"; margin-left: auto; font-size: 11px; color: var(--color-muted); }
+  .fold[open] > .fold-summary { border-bottom: 1px solid var(--color-line); }
+  .fold[open] > .fold-summary::after { content: "▴"; }
+  .fold-body { padding: 12px 14px 14px; max-width: 80ch; }
+
+  /* ── /health's guide: one <details> per stage, steps as a list with a dot each ── */
+  .guide-stage { padding: 0; }
+  .guide-summary { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; list-style: none; }
+  .guide-summary::-webkit-details-marker { display: none; }
+  .guide-summary::after { content: "▾"; margin-left: auto; font-size: 11px; color: var(--color-muted); }
+  .guide-stage[open] > .guide-summary { border-bottom: 1px solid var(--color-line); }
+  .guide-stage[open] > .guide-summary::after { content: "▴"; }
+  .guide-steps { display: flex; flex-direction: column; }
+  .guide-step { display: flex; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--color-hair); }
+  .guide-step:first-child { border-top: 0; }
+
+  /* ── the draft basket: the "+" in a cell, the tray at the foot of the page, the symbol box ── */
+  .add-draft {
+    display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px;
+    border: 1px solid var(--color-line); background: var(--color-panel); color: var(--color-muted);
+    font-size: 13px; line-height: 1; cursor: pointer;
+  }
+  .add-draft:hover { border-color: var(--color-accent); color: var(--color-accent); }
+  .add-draft.on { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-white); }
+  .draft-tray {
+    position: fixed; right: 16px; bottom: 16px; z-index: 45;
+    display: flex; flex-direction: column; gap: 8px; max-width: min(720px, calc(100vw - 32px));
+    padding: 10px 14px; box-shadow: var(--shadow-panel);
+  }
+  .draft-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .draft-names { min-width: 0; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .suggest {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
+    max-height: 280px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; box-shadow: var(--shadow-panel);
+  }
+  .suggest-row {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px;
+    background: transparent; color: var(--color-ink); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  }
+  .suggest-row.active, .suggest-row:hover { background: var(--color-raised); }
+  .suggest-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink-2); }
+  .suggest-note { flex: none; font-size: 10.5px; color: var(--color-amber); }
 
   /* ── entity pages: 7/5 columns, fact lists on hairlines with the card's uppercase labels ── */
   .detail { display: grid; grid-template-columns: 7fr 5fr; gap: 0 40px; align-items: start; }
@@ -393,8 +480,7 @@
   .who { display: none; }
   .main { padding: 0 12px 48px; }
   .page { padding-top: 16px; }
-  .explorer, .detail { grid-template-columns: minmax(0, 1fr); }
-  .facets { padding-top: 0; }
+  .detail { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 719px) {
   .topbar { overflow-x: auto; }

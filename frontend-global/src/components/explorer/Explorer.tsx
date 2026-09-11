@@ -1,6 +1,6 @@
 'use client'
-// src/components/explorer/Explorer.tsx — facet rail + count line + the DataTable over a list the
-// page loaded once. All state (query, facets, sort) is the URL, read with useSearchParams and
+// src/components/explorer/Explorer.tsx — peer strip + filter bar + count line + the DataTable over a
+// list the page loaded once. All state (query, facets, sort) is the URL, read with useSearchParams and
 // written with history.replaceState (which Next syncs back into the router, without a request),
 // so a screen is a shareable address. The top bar's search box writes the same `q`.
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -18,7 +18,7 @@ import {
 } from '@/lib/explorer'
 import { formatNum } from '@/lib/format'
 import { DataTable, type Column } from './DataTable'
-import { FacetRail } from './FacetRail'
+import { FacetBar } from './FacetBar'
 import { PeerStrip } from './PeerStrip'
 
 type Props<R> = {
@@ -87,14 +87,6 @@ export function Explorer<R extends { symbol: string; name: string | null }>({ ro
 
   return (
     <div className="explorer">
-      <FacetRail
-        groups={groups}
-        values={values}
-        counts={counts}
-        selected={state.facets}
-        onChange={(key, sel) => write({ ...state, facets: { ...state.facets, [key]: sel } })}
-        onClear={filtered ? () => write({ ...state, facets: defaults }) : undefined}
-      />
       <div className="min-w-0">
         {strip && (
           <PeerStrip
@@ -108,6 +100,16 @@ export function Explorer<R extends { symbol: string; name: string | null }>({ ro
             }}
           />
         )}
+        {/* The filters sit BETWEEN the groups and the rows: choose a job, narrow it, read the ranking. */}
+        <FacetBar
+          groups={groups}
+          values={values}
+          counts={counts}
+          selected={state.facets}
+          onChange={(key, sel) => write({ ...state, facets: { ...state.facets, [key]: sel } })}
+          onClear={filtered ? () => write({ ...state, facets: defaults }) : undefined}
+          omit={stripKey}
+        />
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-body text-ink-2" role="status" data-testid="count" data-total={total} data-shown={shown.length}>
             {line}

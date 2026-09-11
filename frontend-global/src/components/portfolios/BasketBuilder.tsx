@@ -6,7 +6,8 @@
 // arithmetic the action uses (src/lib/basketDraft.ts), so what the form says adds up is what
 // the action will accept.
 import { useActionState, useState } from 'react'
-import { createBasket } from '@/app/portfolios/new/actions'
+import { createBasket, suggestInstruments } from '@/app/portfolios/new/actions'
+import { InstrumentAutocomplete } from './InstrumentAutocomplete'
 import { KINDS, microToPct, pctToMicro, type DraftInput, type FormState } from '@/lib/basketDraft'
 
 type Row = { id: number; symbol: string; weightPct: string }
@@ -30,6 +31,7 @@ export function BasketBuilder({
   session,
   seed,
   seedName,
+  seedKind,
 }: {
   limits: BuilderLimits
   session: string | null
@@ -39,13 +41,15 @@ export function BasketBuilder({
   seed?: { symbol: string; weightPct: string }[]
   /** A name the page arrived with, so a basket built from Water opens called "Water". */
   seedName?: string
+  /** The kind the draft tray arrived with, so a stock draft opens a stock basket. */
+  seedKind?: 'etf' | 'stock'
 }) {
   const initial: FormState = {
     errors: [],
     notes: [],
     values: {
       name: seedName ?? '',
-      kind: KINDS[0],
+      kind: seedKind ?? KINDS[0],
       capital: limits.defaultCapital,
       // A refused submit hands back what was typed, and THAT must win over the link's seed —
       // otherwise correcting one weight would silently reset every other row to equal.
@@ -137,14 +141,12 @@ export function BasketBuilder({
           {rows.map((r) => (
             <tr key={r.id}>
               <td>
-                <input
-                  className="field text-body uppercase"
-                  name="symbol"
+                <InstrumentAutocomplete
                   value={r.symbol}
-                  onChange={(e) => setRow(r.id, { symbol: e.target.value.toUpperCase() })}
+                  onChange={(symbol) => setRow(r.id, { symbol })}
+                  kind={values.kind === 'stock' ? 'stock' : 'etf'}
+                  suggest={suggestInstruments}
                   placeholder={values.kind === 'etf' ? 'e.g. SPY' : 'e.g. AAPL'}
-                  autoComplete="off"
-                  spellCheck={false}
                 />
               </td>
               <td className="r">

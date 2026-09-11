@@ -11,6 +11,7 @@
 // inch apart on composite can be a cheap liquid one and an expensive concentrated one, and cost &
 // liquidity is the column that says so.
 import Link from 'next/link'
+import { AddToDraft } from '@/components/portfolios/AddToDraft'
 import { useRouter } from 'next/navigation'
 import { RsCell } from '@/components/countries/RsCell'
 import { DecileMeter } from '@/components/ui/DecileMeter'
@@ -62,6 +63,7 @@ export function ThemeFundTable({ funds, showDecile }: { funds: ThemeFund[]; show
                 {LABEL[w]} vs SPY
               </th>
             ))}
+            <th className={`${th} text-center`} title="Add to a draft basket">+</th>
           </tr>
         </thead>
         <tbody>
@@ -114,6 +116,9 @@ export function ThemeFundTable({ funds, showDecile }: { funds: ThemeFund[]; show
                 {THEME_WINDOWS.map((w, i) => (
                   <RsCell key={w} value={f.rs[w]} first={i === 0} />
                 ))}
+                <td className="px-2 py-2 text-center">
+                  <AddToDraft kind="etf" symbol={f.symbol} />
+                </td>
               </tr>
             )
           })}

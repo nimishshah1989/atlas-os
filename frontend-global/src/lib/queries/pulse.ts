@@ -22,6 +22,7 @@ import 'server-only'
 import { eodCached } from '@/lib/cache'
 import { db, dbAvailable } from '@/lib/db'
 import type { AssetClass } from '@/lib/facts'
+import { NEAR_52W_PCT } from '@/lib/breadth'
 import { ANCHOR, type Anchor } from './instruments'
 
 /** One population's breadth on one date. `measured` is the denominator every share is over. */
@@ -85,7 +86,8 @@ export type Pulse = Anchor & {
 // `count(*) FILTER (WHERE t.above_ema_200)` is how many are above it. The two are different
 // numbers and the page shows both.
 //
-// NEAR THE HIGH is pos_52w >= 98 on a 0–100 scale — technical_daily's own units (01_prices.sql).
+// NEAR THE HIGH is within NEAR_52W_PCT of 100 on pos_52w's 0–100 scale (src/lib/breadth.ts — the
+// same constant the board's 52-week facet reads, so a count here opens the same rows there).
 const BREADTH_COLUMNS = `
   count(*)                                                          AS members,
   count(t.above_ema_200)                                            AS measured_ema200,
@@ -97,8 +99,8 @@ const BREADTH_COLUMNS = `
   count(*) FILTER (WHERE t.ema_21 > t.ema_50 AND t.ema_50 > t.ema_200)
                                                                     AS stacked_up,
   count(t.pos_52w)                                                  AS measured_52w,
-  count(*) FILTER (WHERE t.pos_52w >= 98)                           AS near_high,
-  count(*) FILTER (WHERE t.pos_52w <= 2)                            AS near_low,
+  count(*) FILTER (WHERE t.pos_52w >= ${100 - NEAR_52W_PCT})       AS near_high,
+  count(*) FILTER (WHERE t.pos_52w <= ${NEAR_52W_PCT})              AS near_low,
   count(t.rs_3m_spy)                                                AS measured_rs_3m,
   count(*) FILTER (WHERE t.rs_3m_spy > 0)                           AS beating_3m,
   count(t.rs_12m_spy)                                               AS measured_rs_12m,

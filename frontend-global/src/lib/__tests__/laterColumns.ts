@@ -23,8 +23,11 @@ export const NOT_CAPTURED = {
   fundamental: null,
   valuation: null,
   catalyst: null,
-  // technical_daily's trend flag and etf_meta's two cost facts.
+  // technical_daily's three trend flags and etf_meta's two cost facts.
+  above_ema_21: null,
+  above_ema_50: null,
   above_ema_200: null,
+  emas_stacked: null,
   expense_ratio: null,
   aum_usd: null,
 } as const

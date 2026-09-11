@@ -36,11 +36,17 @@ export type Column<R> = {
    *  WITHOUT IT a width-0 column collapses to the 160 px default and every fund name in the ETF
    *  list rendered as an ellipsis — the defect this whole surface was rebuilt to fix. */
   minWidth?: number
-  align?: 'right'
+  /** Where the CELL's content sits; the header follows it. Left for words, right for a
+   *  magnitude (so the digits line up and can be compared down the column), centre for a token
+   *  or a glyph that has no magnitude — a decile chip, a "2/5", a trend stack. A header that
+   *  sits somewhere its column does not is the misalignment the FM saw on every table. */
+  align?: 'left' | 'right' | 'center'
   sortValue: (r: R) => string | number | null
   render: (r: R) => ReactNode
-  /** A fuller header, shown on hover. */
+  /** What the column measures — one or two sentences, shown in the header's hover card. */
   title?: string
+  /** How it is computed, when there is a formula worth stating. Shown under the title. */
+  formula?: string
   /** Per-row cell styling — the relative-strength tint. Colour is never the only channel: a
    *  tinted cell still prints its value. */
   cellStyle?: (r: R) => CSSProperties | undefined
@@ -63,7 +69,9 @@ type Props<R> = {
 const DIVIDER: CSSProperties = { borderLeft: '1px solid var(--color-rule)' }
 
 const cellClass = <R,>(c: Column<R>, kind: 'th' | 'td') =>
-  [kind === 'td' && c.align === 'right' ? 'num' : '', c.align === 'right' ? 'r' : ''].filter(Boolean).join(' ') || undefined
+  [kind === 'td' && c.align === 'right' ? 'num' : '', c.align === 'right' ? 'r' : c.align === 'center' ? 'c' : '']
+    .filter(Boolean)
+    .join(' ') || undefined
 
 function cellStyle<R>(c: Column<R>, r: R): CSSProperties | undefined {
   const tint = c.cellStyle?.(r)
@@ -85,6 +93,20 @@ export function DataTable<R>({ rows, columns, rowKey, sort, onSort, empty }: Pro
   // How far the table's top edge has passed above the fold, and how tall the fold is. Both are
   // measured from the document's own scroll, so there is no inner scrollport to get out of step.
   const [view, setView] = useState({ above: 0, height: DEFAULT_HEIGHT })
+  // THE HOVER CARD IS ONE ELEMENT, positioned against the viewport. It cannot live inside the
+  // header cell: `.dt` scrolls sideways, and `overflow-x: auto` clips vertically too, so a card
+  // absolutely positioned under a <th> was cut off at the table's edge. A native `title` on the
+  // sort button was the previous answer — a second's delay, a hit area the width of the word,
+  // and nothing at all on the keyboard. The FM: "none of the columns have tool tips."
+  const [tip, setTip] = useState<{ key: string; left: number; top: number; right: boolean } | null>(null)
+  const showTip = (c: Column<R>, el: HTMLElement) => {
+    if (!c.title && !c.formula) return
+    const box = el.getBoundingClientRect()
+    // Open leftwards from the right edge for the last columns, so the card stays on screen.
+    const right = box.left + 320 > window.innerWidth
+    setTip({ key: c.key, left: right ? box.right : box.left, top: box.bottom + 4, right })
+  }
+  const tipCol = tip ? columns.find((c) => c.key === tip.key) : undefined
 
   useLayoutEffect(() => {
     let queued = false
@@ -143,8 +165,17 @@ export function DataTable<R>({ rows, columns, rowKey, sort, onSort, empty }: Pro
                   className={cellClass(c, 'th')}
                   style={c.divider ? DIVIDER : undefined}
                   aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+                  onPointerEnter={(e) => showTip(c, e.currentTarget)}
+                  onPointerLeave={() => setTip(null)}
                 >
-                  <button type="button" className="dt-sort" onClick={() => toggle(c)} title={c.title}>
+                  <button
+                    type="button"
+                    className={`dt-sort${c.title || c.formula ? ' has-tip' : ''}`}
+                    onClick={() => toggle(c)}
+                    onFocus={(e) => showTip(c, e.currentTarget)}
+                    onBlur={() => setTip(null)}
+                    aria-describedby={tip?.key === c.key ? 'dt-tip' : undefined}
+                  >
                     <span>{c.label}</span>
                     {active && <Icon name={sort.dir === 'asc' ? 'up' : 'down'} className="text-accent" />}
                   </button>
@@ -174,6 +205,18 @@ export function DataTable<R>({ rows, columns, rowKey, sort, onSort, empty }: Pro
           {end < n && <Spacer height={(n - end) * ROW_HEIGHT} span={columns.length} />}
         </tbody>
       </table>
+      {tip && tipCol && (
+        <div
+          id="dt-tip"
+          role="tooltip"
+          className="dt-tip"
+          style={tip.right ? { top: tip.top, right: window.innerWidth - tip.left } : { top: tip.top, left: tip.left }}
+        >
+          <span className="dt-tip-label">{tipCol.label}</span>
+          {tipCol.title && <span className="dt-tip-body">{tipCol.title}</span>}
+          {tipCol.formula && <code className="dt-tip-formula">{tipCol.formula}</code>}
+        </div>
+      )}
     </div>
   )
 }

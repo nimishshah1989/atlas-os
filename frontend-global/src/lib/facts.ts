@@ -71,9 +71,17 @@ export type InstrumentDbRow = {
   adv_usd: string | null
   vol_ann: string | null
   mdd_12m: string | null
-  /** Trading above its own 200-day average. NULL until the instrument has 200 sessions — a fund
-   *  listed in March has not FAILED this test, so it renders as unknown and never as "no". */
+  /** Trading above its own 21-, 50- and 200-day averages — the three the pulse counts breadth
+   *  on, so a row's trend stack and the market's breadth are the same fact at two scales. Each is
+   *  NULL until the instrument has that many sessions: a fund listed in March has not FAILED the
+   *  200-day test, so it renders as unknown and never as "no". */
+  above_ema_21: boolean | null
+  above_ema_50: boolean | null
   above_ema_200: boolean | null
+  /** The averages themselves in order, EMA 21 > 50 > 200 — the same expression the pulse counts
+   *  as "averages stacked up", evaluated in the query so the two cannot drift. NULL until all
+   *  three averages exist. */
+  emas_stacked: boolean | null
   // ── etf_meta: the two facts that separate near-identical funds
   expense_ratio: string | null
   aum_usd: string | null
