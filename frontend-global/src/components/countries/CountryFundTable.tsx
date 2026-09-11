@@ -13,6 +13,7 @@
 // it is geared, inverse, or below his liquidity floor — so it keeps the composite we measured,
 // sits below the ranked block, and says on its own row which rule kept it out.
 import Link from 'next/link'
+import { AddToDraft } from '@/components/portfolios/AddToDraft'
 import { useRouter } from 'next/navigation'
 import { DecileMeter } from '@/components/ui/DecileMeter'
 import { formatPct, formatUsd } from '@/lib/format'
@@ -55,6 +56,7 @@ export function CountryFundTable({ funds }: { funds: CountryFund[] }) {
                 {LABEL[w]} vs SPY
               </th>
             ))}
+            <th className={`${th} text-center`} title="Add to a draft basket">+</th>
           </tr>
         </thead>
         <tbody>
@@ -110,6 +112,9 @@ export function CountryFundTable({ funds }: { funds: CountryFund[] }) {
                 {SHOWN.map((w, i) => (
                   <RsCell key={w} value={f.rs[w]} first={i === 0} />
                 ))}
+                <td className="px-2 py-2 text-center">
+                  <AddToDraft kind="etf" symbol={f.symbol} />
+                </td>
               </tr>
             )
           })}

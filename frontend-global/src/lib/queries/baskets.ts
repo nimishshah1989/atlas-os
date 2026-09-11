@@ -14,7 +14,7 @@
 // (since-inception, vs SPY in the relative form (1+r)/(1+b) − 1) are arithmetic over stored
 // rows in NUMERIC, not floats.
 import 'server-only'
-import type { Constituent, DraftLimits, ParsedDraft, ResolvedInstrument } from '@/lib/basketDraft'
+import type { Constituent, DraftLimits, ParsedDraft, ResolvedInstrument, Suggestion } from '@/lib/basketDraft'
 import { db, dbAvailable } from '@/lib/db'
 
 export type BasketSummary = {
@@ -277,6 +277,25 @@ export async function resolveSymbols(symbols: string[]): Promise<ResolvedInstrum
     SELECT instrument_id::text AS instrument_id, symbol, asset_class, name, is_active, fractionable
     FROM atlas_global.instrument_master
     WHERE is_active AND symbol = ANY(${symbols}::text[])`
+}
+
+/** The symbol box's suggestions: active instruments of the basket's kind whose symbol starts with
+ *  the text, or whose name contains it, symbol matches first, with the universe verdict at the
+ *  latest snapshot. Bounded to a dozen — a suggestion list is a shortlist, not a directory. */
+export async function searchInstruments(q: string, kind: 'etf' | 'stock', limit = 12): Promise<Suggestion[]> {
+  const needle = q.trim().toUpperCase().replace(/[%_\\]/g, '')
+  if (!needle) return []
+  return db()<Suggestion[]>`
+    SELECT m.symbol, m.name, u.in_universe
+    FROM atlas_global.instrument_master m
+    LEFT JOIN LATERAL (
+      SELECT s.in_universe FROM atlas_global.universe_snapshot s
+      WHERE s.instrument_id = m.instrument_id ORDER BY s.date DESC LIMIT 1
+    ) u ON true
+    WHERE m.is_active AND m.asset_class = ${kind}
+      AND (m.symbol LIKE ${needle + '%'} OR upper(m.name) LIKE ${'%' + needle + '%'})
+    ORDER BY (m.symbol LIKE ${needle + '%'}) DESC, (u.in_universe IS TRUE) DESC, length(m.symbol), m.symbol
+    LIMIT ${limit}`
 }
 
 /** The latest SPY session — the inception date a new basket is stamped with; null with no bars. */

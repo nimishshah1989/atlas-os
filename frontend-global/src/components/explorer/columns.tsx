@@ -14,6 +14,7 @@
 // at a lens nobody measured (rule #0) — and every composite is printed beside the count of lenses
 // it was actually built from, so a two-lens score cannot be read as a full one.
 import Link from 'next/link'
+import { AddToDraft } from '@/components/portfolios/AddToDraft'
 import { Chip } from '@/components/ui/Chip'
 import { DecileChip, LeaderMark } from '@/components/ui/DecileChip'
 import { DecileMeter } from '@/components/ui/DecileMeter'
@@ -278,6 +279,18 @@ const MDD: Column<InstrumentRow> = {
   render: (r) => formatPct(r.mdd_12m, 0),
 }
 
+/** The "+": into the draft basket, from any row. Last in every view so the sticky symbol column
+ *  and the ranking read as before; the tray at the foot of the page does the rest. */
+const add = (assetClass: AssetClass): Column<InstrumentRow> => ({
+  key: 'add',
+  label: '+',
+  width: 40,
+  align: 'center',
+  title: 'Add this instrument to a draft basket. The tray at the foot of the page opens the builder with everything you have picked.',
+  sortValue: () => null,
+  render: (r) => <AddToDraft kind={assetClass} symbol={r.symbol} />,
+})
+
 /** The universe verdict, shown only once the reader has asked for everything listed. */
 export const universeColumn = (label: (r: InstrumentRow) => string): Column<InstrumentRow> => ({
   key: 'universe',
@@ -467,19 +480,21 @@ export function boardColumns(ctx: ColumnContext, scored: boolean, view: BoardVie
   const etf = ctx.assetClass === 'etf'
   const identity = etf ? [symbol('etf'), NAME, PEER] : [symbol('stock'), NAME, SECTOR_COL, COHORT]
 
+  const plus = add(ctx.assetClass)
+
   // Nothing scored: the lens view has nothing to show, so it falls back rather than rendering a
   // grid of dashes the reader has to interpret.
-  if (!scored) return [...identity, ...PRICE_COLUMNS, ...RISK_COLUMNS]
+  if (!scored) return [...identity, ...PRICE_COLUMNS, ...RISK_COLUMNS, plus]
 
   if (view === 'lenses') {
-    return [...identity, COMPOSITE, lenses(ctx), technical(ctx), ...(etf ? ETF_LENS_COLUMNS : STOCK_LENS_COLUMNS)]
+    return [...identity, COMPOSITE, lenses(ctx), technical(ctx), ...(etf ? ETF_LENS_COLUMNS : STOCK_LENS_COLUMNS), plus]
   }
   if (view === 'cost') {
     // A company has no expense ratio and no fund assets, so on the stock board this view is what
     // it can honestly be: the sector, the trend and the liquidity.
     return etf
-      ? [...identity, COMPOSITE, THEME_COL, EXPENSE, AUM, ADV, EMA_STACK, POS_52W]
-      : [...identity, COMPOSITE, ADV, EMA_STACK, POS_52W, VOL, MDD]
+      ? [...identity, COMPOSITE, THEME_COL, EXPENSE, AUM, ADV, EMA_STACK, POS_52W, plus]
+      : [...identity, COMPOSITE, ADV, EMA_STACK, POS_52W, VOL, MDD, plus]
   }
-  return [...identity, ...SCORE_COLUMNS(ctx), ...PRICE_COLUMNS, ...RISK_COLUMNS]
+  return [...identity, ...SCORE_COLUMNS(ctx), ...PRICE_COLUMNS, ...RISK_COLUMNS, plus]
 }
