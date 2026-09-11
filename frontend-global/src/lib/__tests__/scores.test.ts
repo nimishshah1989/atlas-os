@@ -20,6 +20,7 @@ import {
   TIER_LABEL,
   universeSide,
 } from '@/lib/scores'
+import { CEILING } from '@/lib/tone'
 
 describe('decile → colour', () => {
   it('maps each decile to its own step of the ramp defined in globals.css', () => {
@@ -105,11 +106,16 @@ describe('conviction tiers', () => {
 })
 
 describe('the relative-strength tint', () => {
-  it('saturates at ±20 percent and is proportional below it', () => {
-    expect(rsTint('0.2')).toBe('color-mix(in srgb, var(--color-pos) 100%, transparent)')
-    expect(rsTint('0.1')).toBe('color-mix(in srgb, var(--color-pos) 50%, transparent)')
-    expect(rsTint('-0.1')).toBe('color-mix(in srgb, var(--color-neg) 50%, transparent)')
-    expect(rsTint('0.9')).toBe('color-mix(in srgb, var(--color-pos) 100%, transparent)')
+  it('saturates at ±20 percent — at the shared ceiling, never at a solid colour', () => {
+    // 100% of --color-pos under near-black ink was 3.9:1; the ceiling keeps every step over 10:1.
+    expect(rsTint('0.2')).toBe(`color-mix(in srgb, var(--color-pos) ${CEILING.toFixed(1)}%, transparent)`)
+    expect(rsTint('0.9')).toBe(rsTint('0.2'))
+    expect(rsTint('-0.1')).toContain('var(--color-neg)')
+    expect(rsTint('0.1')).toContain('var(--color-pos)')
+    // The ramp is not linear: half the magnitude is more than half the tint, so a small lead shows.
+    const pct = (s: string | undefined) => Number(/([\d.]+)%/.exec(s ?? '')?.[1])
+    expect(pct(rsTint('0.1'))).toBeGreaterThan(CEILING / 2)
+    expect(pct(rsTint('0.1'))).toBeLessThan(CEILING)
   })
   it('has no tint at all for a window an instrument is too young to have', () => {
     expect(rsTint(null)).toBeUndefined()

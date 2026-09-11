@@ -104,6 +104,8 @@ const etfListInner = eodCached(async (all: boolean): Promise<ListRow[]> => {
       -- fund is in an uptrend at all. All three come from producers, none is derived here.
       em.expense_ratio::text   AS expense_ratio,
       em.aum_usd::text         AS aum_usd,
+      t.above_ema_21           AS above_ema_21,
+      t.above_ema_50           AS above_ema_50,
       t.above_ema_200          AS above_ema_200,
       r.conviction_tier, r.peer_group,
       r.lenses_active::int     AS lenses_active,
@@ -198,6 +200,8 @@ const stockListInner = eodCached(async (all: boolean): Promise<ListRow[]> => {
       -- A company has no expense ratio and no fund assets. NULL is the real value, and the column
       -- simply does not appear in the stock column set.
       NULL::text AS expense_ratio, NULL::text AS aum_usd,
+      t.above_ema_21           AS above_ema_21,
+      t.above_ema_50           AS above_ema_50,
       t.above_ema_200          AS above_ema_200,
       r.conviction_tier, r.peer_group,
       r.lenses_active::int     AS lenses_active,

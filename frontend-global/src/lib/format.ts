@@ -151,6 +151,43 @@ export function formatPct(
   return `${sign}${group(int)}${frac ? '.' + frac : ''}%`
 }
 
+/** A percentage that NEVER ellipsises. The board's relative-strength and volatility cells are
+ *  82 and 62 px wide, sized for "+129.4%" — and then a fund with a broken price series printed
+ *  "+4,655.0%", which a fixed cell cut to "+465…". The FM: "some numbers are getting cut."
+ *
+ *  Past ±100% the tenth says nothing a reader acts on, so it is dropped ("+465%"); past
+ *  ±10,000% the figure is compacted to thousands ("+46.5k%"). The exact value belongs in the
+ *  cell's title, one hover away — the compact form is a rendering, never a rounding of the fact.
+ *  Same BigInt path as every formatter here: the NUMERIC never becomes a double. */
+export function formatPctCompact(
+  fraction: string | number | null | undefined,
+  decimals = 1,
+  opts: { sign?: boolean } = {},
+): string {
+  if (fraction == null || fraction === '') return '—'
+  const s = typeof fraction === 'number' ? numberToDecimal(fraction) : fraction
+  const hundred = timesHundred(s)
+  // Width is decided on the figure BEFORE rounding: 99.9 keeps its tenth rather than becoming
+  // "100" and then losing it.
+  const digits = hundred.replace('-', '').split('.')[0].replace(/^0+(?=\d)/, '').length
+  if (digits >= 4) {
+    // Thousands of percent: the point moves three places along the digit string and the result
+    // is rounded half-up to one decimal — "4,655" → "4.7k". Nothing is divided.
+    const { negative, zero, int, frac } = roundDecimal(overThousand(hundred), 1)
+    const sign = negative ? '-' : opts.sign && !zero ? '+' : ''
+    return `${sign}${int}${frac !== '0' ? `.${frac}` : ''}k%`
+  }
+  return formatPct(s, digits >= 3 ? 0 : decimals, opts)
+}
+
+/** "4655.2" → "4.6552": the decimal point three places to the left, on the digit string. */
+function overThousand(s: string): string {
+  const negative = s.startsWith('-')
+  const [i, f = ''] = (negative ? s.slice(1) : s).split('.')
+  const padded = i.padStart(4, '0')
+  return `${negative ? '-' : ''}${padded.slice(0, -3)}.${padded.slice(-3)}${f}`
+}
+
 /** A NUMERIC string that is already in display units (a 0–100 position, a count): "57.1234" → "57". */
 export function formatDecimal(value: string | null | undefined, decimals = 0): string {
   if (value == null || value === '') return '—'

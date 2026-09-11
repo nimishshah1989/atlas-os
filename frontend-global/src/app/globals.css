@@ -217,9 +217,13 @@
 
   /* ── tables ──────────────────────────────────────────────────────────────────────────── */
   .tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-  /* every table head in a panel, the countries grid's included: the desk's small uppercase */
+  /* every table head in a panel, the countries grid's included: the desk's small uppercase.
+     A HEADER SITS WHERE ITS COLUMN SITS. This used to centre every header over cells that were
+     left- or right-aligned, so no label lined up with anything beneath it — "font and numbers are
+     not aligned", on every table. Words are left, magnitudes are right (`.r`), tokens are centred
+     (`.c`); the header carries the same class as its cells and lands on the same edge. */
   .tbl th, .dt-table th, .panel table th {
-    background: var(--color-panel-solid); text-align: center;
+    background: var(--color-panel-solid); text-align: left;
     text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; font-weight: 600;
     color: var(--color-muted); border-bottom: 1px solid var(--color-line);
     white-space: nowrap; padding: 9px 12px;
@@ -230,6 +234,7 @@
   .tbl tbody tr:last-child td { border-bottom: 0; }
   .tbl tbody tr:hover td { background: var(--color-tint-info); }
   .tbl .r { text-align: right; }
+  .tbl .c, .dt-table th.c, .dt-table td.c { text-align: center; }
   .tbl td .sub, .dt-table td .sub { color: var(--color-muted); margin-left: 4px; font-size: 11px; }
   .tbl tfoot td, .dt-table tfoot td { background: var(--color-panel); border-top: 2px solid var(--color-line); font-weight: 650; }
   /* a section row across the table, its left edge coloured by state */
@@ -341,6 +346,24 @@
   }
   .dt-table th.r .dt-sort { flex-direction: row-reverse; }
   .dt-sort:hover, .dt-table th[aria-sort] .dt-sort { color: var(--color-ink); }
+  /* a header with something to say is dotted underneath — the desk's convention for "hover me" */
+  .dt-sort.has-tip > span:first-child { text-decoration: underline dotted; text-decoration-color: var(--color-edge-strong); text-underline-offset: 3px; }
+  /* THE HEADER'S HOVER CARD: one element, fixed to the viewport so the sideways-scrolling table
+     cannot clip it. Label, what the column measures, then the formula if there is one. */
+  .dt-tip {
+    position: fixed; z-index: 60; width: 300px; max-width: calc(100vw - 24px);
+    padding: 10px 12px; border-radius: var(--radius-tile);
+    border: 1px solid var(--color-edge-rule); background: var(--color-surface-raised);
+    box-shadow: var(--shadow-panel); color: var(--color-txt-2);
+    font-size: 11.5px; line-height: 1.55; font-weight: 400; letter-spacing: normal;
+    text-transform: none; text-align: left; white-space: normal; pointer-events: none;
+  }
+  .dt-tip-label { display: block; margin-bottom: 3px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-txt-3); }
+  .dt-tip-body { display: block; }
+  .dt-tip-formula {
+    display: block; margin-top: 6px; padding: 4px 7px; border-radius: 6px;
+    background: var(--color-surface-inset); color: var(--color-txt-1); font-size: 11px; font-weight: 500;
+  }
   /* ROWS ARE 44 PX (DataTable's ROW_HEIGHT): the height is set outright, so the 9 px padding
      never changes it */
   .dt-table td {

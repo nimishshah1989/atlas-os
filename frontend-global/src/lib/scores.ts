@@ -13,6 +13,7 @@
 // 3. Colour is the SECOND channel, never the only one. Every tinted cell also prints its value,
 //    so the board reads in greyscale, to a colour-blind reader, and in a pasted screenshot.
 //    Same discipline as the country grid's RS cells.
+import { signedTint } from '@/lib/tone'
 
 /** Leader = top decile within the peer group (docs/global/phase2.md P2-C, the cut India's
  *  v_stock_leader makes within cap cohort). It is a rank, not a score. */
@@ -30,20 +31,16 @@ export const isLeader = (decile: number | null | undefined) => decile === LEADER
 
 // ── relative strength tint ──────────────────────────────────────────────────
 
-/** |RS| at which the tint saturates — beyond ±20 percent, more is not louder. The country grid's
- *  RsCell uses the same constant for the same reason; the two surfaces must not disagree. */
+/** |RS| at which the tint saturates — beyond ±20 percent, more is not louder. Every surface that
+ *  tints a relative strength (the board, the country grid, the sector heatmap, the pulse) goes
+ *  through this one function, so no two of them can disagree about what ±20 looks like. */
 const FULL_TINT = 0.2
 
 /** The cell background for a relative-strength value, or undefined when there is nothing to tint.
- *  `color-mix` over the theme's own tokens, so the tint follows the palette instead of baking a
- *  light-mode green into a dark board. */
+ *  The ramp and its ceiling live in src/lib/tone.ts: a text cell never goes darker than the
+ *  decile chip does, and a two-point lead is visible rather than a wash. */
 export function rsTint(value: string | null | undefined): string | undefined {
-  if (value == null || value === '') return undefined
-  const n = Number(value)
-  if (!Number.isFinite(n)) return undefined
-  const share = Math.min(Math.abs(n) / FULL_TINT, 1) * 100
-  const token = n >= 0 ? 'var(--color-pos)' : 'var(--color-neg)'
-  return `color-mix(in srgb, ${token} ${share.toFixed(0)}%, transparent)`
+  return signedTint(value, FULL_TINT)
 }
 
 // ── lenses ──────────────────────────────────────────────────────────────────

@@ -26,6 +26,7 @@ import Link from 'next/link'
 import { InfoTip } from '@/components/ui/InfoTip'
 import { formatDecimal, formatPct, formatUsdCompact } from '@/lib/format'
 import { rsTint } from '@/lib/scores'
+import { rangeTint } from '@/lib/tone'
 import {
   SECTOR_WINDOWS,
   scoreSpan,
@@ -101,17 +102,12 @@ function ScoreCell({ node, span }: { node: SectorNode; span: { best: number; wor
       </span>
     )
   }
-  const v = Number(node.composite)
-  const width = span ? span.best - span.worst : 0
-  // A floor of 8 percent so the weakest row is still visibly a row, and a ceiling of 70 so the
-  // strongest never reads as a solid block. A population with no spread gets the middle of that.
-  const share = span && width > 0 ? ((v - span.worst) / width) * 0.62 + 0.08 : 0.35
+  // Positional within the siblings on screen (src/lib/tone.ts): the weakest row is floored so it
+  // is still visibly a row, the strongest stops at the same ceiling every text tint stops at.
+  const background = span ? rangeTint(node.composite, span.worst, span.best) : rangeTint(node.composite, 0, 0)
   return (
     <span className="flex items-center justify-end gap-1.5">
-      <span
-        className="rounded-tile px-1.5 py-px font-display text-[12.5px] font-semibold text-ink"
-        style={{ background: `color-mix(in srgb, var(--color-pos) ${(share * 100).toFixed(0)}%, transparent)` }}
-      >
+      <span className="rounded-tile px-1.5 py-px font-display text-[12.5px] font-semibold text-ink" style={{ background }}>
         {formatDecimal(node.composite, 1)}
       </span>
       {node.rank != null && (

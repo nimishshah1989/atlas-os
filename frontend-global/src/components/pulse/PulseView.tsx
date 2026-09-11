@@ -12,6 +12,7 @@ import { BreadthBar } from '@/components/pulse/BreadthBar'
 import { Section } from '@/components/ui/Section'
 import { formatIsoDate, formatNum, formatPct } from '@/lib/format'
 import type { Pulse } from '@/lib/queries/pulse'
+import { shareTint } from '@/lib/tone'
 
 const POPULATION: Record<string, { title: string; note: string }> = {
   stock: { title: 'The S&P 500', note: 'current members, from the SSGA holdings file' },
@@ -155,14 +156,8 @@ const share = (count: number, measured: number) => (measured === 0 ? -1 : count 
 function fraction(count: number, measured: number) {
   if (measured === 0) return <span className="text-ink-3">—</span>
   const share = count / measured
-  const token = share >= 0.5 ? 'var(--color-pos)' : 'var(--color-neg)'
-  // Distance from half, doubled, is the saturation: 50 percent is bare, 0 or 100 is full.
-  const ink = Math.min(Math.abs(share - 0.5) * 2, 1) * 62
   return (
-    <span
-      className="rounded-tile px-1 py-px text-ink"
-      style={{ background: `color-mix(in srgb, ${token} ${ink.toFixed(0)}%, transparent)` }}
-    >
+    <span className="rounded-tile px-1 py-px text-ink" style={{ background: shareTint(share) }}>
       {(share * 100).toFixed(0)}%<span className="ml-1 text-ink-3">{count}/{measured}</span>
     </span>
   )

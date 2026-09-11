@@ -1,7 +1,7 @@
 // Pure formatters. Inputs are dates and decimal STRINGS exercising the formatting rules — no
 // market figure is invented here (rule #0); the values are format fixtures, not data.
 import { describe, expect, it } from 'vitest'
-import { formatAsOf, formatIsoDate, formatPct, formatShortDateTime, formatUsd } from '@/lib/format'
+import { formatAsOf, formatIsoDate, formatPct, formatShortDateTime, formatUsd, formatPctCompact } from '@/lib/format'
 
 describe('formatAsOf', () => {
   it('renders the as-of stamp in New York time', () => {
@@ -80,5 +80,30 @@ describe('formatPct', () => {
 
   it('renders null as an em dash', () => {
     expect(formatPct(null)).toBe('—')
+  })
+})
+
+describe('formatPctCompact — a percentage that never ellipsises', () => {
+  it('is formatPct below ±100%', () => {
+    expect(formatPctCompact('0.134', 1, { sign: true })).toBe('+13.4%')
+    expect(formatPctCompact('-0.0075', 2)).toBe('-0.75%')
+    expect(formatPctCompact('0', 1, { sign: true })).toBe('0.0%')
+  })
+  it('drops the tenth from ±100% — "+465%", not "+465.0%" cut to "+465…"', () => {
+    expect(formatPctCompact('4.654', 1, { sign: true })).toBe('+465%')
+    expect(formatPctCompact('4.655', 1, { sign: true })).toBe('+466%') // half-up, as every formatter here
+    expect(formatPctCompact('1.0', 1, { sign: true })).toBe('+100%')
+    expect(formatPctCompact('-0.999', 1, { sign: true })).toBe('-99.9%')
+  })
+  it('compacts thousands of percent to "k" with one decimal', () => {
+    expect(formatPctCompact('46.55', 1, { sign: true })).toBe('+4.7k%')
+    expect(formatPctCompact('823.1', 0)).toBe('82.3k%')
+    expect(formatPctCompact('100', 1, { sign: true })).toBe('+10k%')
+    expect(formatPctCompact('-123.456', 1)).toBe('-12.3k%')
+    expect(formatPctCompact('9.999', 1)).toBe('1,000%') // width is judged before rounding: 999.9 is three digits
+  })
+  it('renders null as an em dash like every formatter here', () => {
+    expect(formatPctCompact(null)).toBe('—')
+    expect(formatPctCompact('')).toBe('—')
   })
 })
