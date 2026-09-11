@@ -78,6 +78,10 @@ export type InstrumentDbRow = {
   above_ema_21: boolean | null
   above_ema_50: boolean | null
   above_ema_200: boolean | null
+  /** The averages themselves in order, EMA 21 > 50 > 200 — the same expression the pulse counts
+   *  as "averages stacked up", evaluated in the query so the two cannot drift. NULL until all
+   *  three averages exist. */
+  emas_stacked: boolean | null
   // ── etf_meta: the two facts that separate near-identical funds
   expense_ratio: string | null
   aum_usd: string | null

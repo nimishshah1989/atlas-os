@@ -27,6 +27,7 @@ import {
   type AssetClass,
   type InstrumentRow,
 } from '@/lib/facts'
+import { BEATING, NEAR_52W_PCT, POS52, POS52_KEY, RS12_KEY, RS3_KEY, TREND, TREND_KEY } from '@/lib/breadth'
 import { formatIsoDate } from '@/lib/format'
 import type { InstrumentList } from '@/lib/queries/scores'
 import { lensesLabel, peerGroupLabel, peerGroupOf, TIER_LABEL } from '@/lib/scores'
@@ -199,14 +200,75 @@ const MDD: FacetGroup<InstrumentRow> = {
 }
 
 const RS: FacetGroup<InstrumentRow> = {
-  key: 'rs',
+  key: RS12_KEY,
   label: 'Beating the S&P over 12m by',
   kind: 'min',
   value: (r) => r.rs_12m_spy ?? 'none',
   numeric: (r) => num(r.rs_12m_spy),
-  options: ['0', '0.10', '0.25'],
+  options: [BEATING, '0.10', '0.25'],
   format: (v) => (Number(v) === 0 ? 'Any margin' : `${Math.round(Number(v) * 100)} points`),
   labels: { [ALL]: 'Any' },
+  default: ALL,
+}
+
+// ── the breadth facets: the pulse's counts, as filters ──────────────────────
+//
+// Every count on /pulse is a door into this board: "312 above the 200-day" opens the 312. The
+// keys and cuts are shared through src/lib/breadth.ts so the two surfaces cannot disagree.
+
+const RS3: FacetGroup<InstrumentRow> = {
+  key: RS3_KEY,
+  label: 'Beating the S&P over 3m by',
+  kind: 'min',
+  value: (r) => r.rs_3m_spy ?? 'none',
+  numeric: (r) => num(r.rs_3m_spy),
+  options: [BEATING, '0.05', '0.10'],
+  format: (v) => (Number(v) === 0 ? 'Any margin' : `${Math.round(Number(v) * 100)} points`),
+  labels: { [ALL]: 'Any' },
+  default: ALL,
+}
+
+// A radio whose options OVERLAP: a row above its 200-day may also be above its 50-day and may
+// have its averages stacked, and the pulse counts it under each. So the group matches by
+// predicate (`test`), and each option's count is how many rows it would keep. A row whose average
+// does not exist yet matches nothing — it has not FAILED a test nobody could run on it.
+const TREND_TEST: Record<string, (r: InstrumentRow) => boolean> = {
+  [TREND.above21]: (r) => r.above_ema_21 === true,
+  [TREND.above50]: (r) => r.above_ema_50 === true,
+  [TREND.above200]: (r) => r.above_ema_200 === true,
+  [TREND.stacked]: (r) => r.emas_stacked === true,
+}
+
+const TREND_FACET: FacetGroup<InstrumentRow> = {
+  key: TREND_KEY,
+  label: 'Trend',
+  kind: 'one',
+  value: (r) => (r.above_ema_200 === true ? TREND.above200 : 'none'),
+  test: (r, option) => TREND_TEST[option]?.(r) ?? false,
+  options: [TREND.above200, TREND.above50, TREND.above21, TREND.stacked],
+  labels: {
+    [TREND.above200]: 'Above the 200-day',
+    [TREND.above50]: 'Above the 50-day',
+    [TREND.above21]: 'Above the 21-day',
+    [TREND.stacked]: 'Averages stacked up (21 > 50 > 200)',
+    [ALL]: 'Any',
+  },
+  default: ALL,
+}
+
+const POS52_FACET: FacetGroup<InstrumentRow> = {
+  key: POS52_KEY,
+  label: '52-week range',
+  kind: 'one',
+  value: (r) => {
+    const v = num(r.pos_52w)
+    if (v == null) return 'none'
+    if (v >= 100 - NEAR_52W_PCT) return POS52.high
+    if (v <= NEAR_52W_PCT) return POS52.low
+    return 'mid'
+  },
+  options: [POS52.high, POS52.low],
+  labels: { [POS52.high]: `At the high (within ${NEAR_52W_PCT}%)`, [POS52.low]: `At the low (within ${NEAR_52W_PCT}%)`, [ALL]: 'Any' },
   default: ALL,
 }
 
@@ -268,7 +330,7 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
     }
     if (scored) g.push(DECILE, TIER)
     if (etf && classified) g.push(COUNTRY, REGION)
-    if (priced) g.push(ADV, RS, VOL, MDD)
+    if (priced) g.push(TREND_FACET, POS52_FACET, RS3, RS, ADV, VOL, MDD)
     if (etf && classified) g.push(GEARED, INVERSE)
     return g
   }, [universe, etf, classified, scored, priced])

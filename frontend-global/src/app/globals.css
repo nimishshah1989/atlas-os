@@ -300,9 +300,11 @@
   .dot-warn { background: var(--color-amber); }
   .dot-grey { background: var(--color-muted); }
 
-  /* ── explorer: facet rail 260 px + the virtualised table ─────────────────────────────── */
+  /* ── explorer: the filter bar over the virtualised table ─────────────────────────────── */
   .page-wide { max-width: none; }
-  .explorer { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+  /* ONE COLUMN. The 260 px rail this grid used to reserve is gone: the filters are a row above
+     the table (FacetBar), and the table has the width. */
+  .explorer { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
 
   .notice {
     display: flex; align-items: baseline; gap: 10px;
@@ -312,23 +314,38 @@
   }
   .notice .dot { position: relative; top: -1px; }
 
-  /* each facet group is a row of chips; a chosen value is a chip that is .on */
-  .facets { display: flex; flex-direction: column; gap: 18px; padding-top: 30px; }
-  .facet { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
-  .facet-title {
-    display: block; width: 100%; padding: 0 0 2px;
-    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--color-muted);
+  /* the bar: one button per group, its current value in the label; a flag is a toggle */
+  .facetbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .facet-group { position: relative; }
+  .facet-btn {
+    display: inline-flex; align-items: center; gap: 5px; max-width: 260px;
+    padding: 4px 9px 4px 10px; border: 1px solid var(--color-line); border-radius: 20px;
+    background: var(--color-panel); color: var(--color-ink-2); cursor: pointer; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .facet-btn:hover { border-color: var(--color-muted); color: var(--color-ink); }
+  .facet-btn.on { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
+  .facet-btn.open { border-color: var(--color-accent); }
+  .facet-btn-glyph { font-size: 10px; color: var(--color-muted); }
+  .facet-btn.on .facet-btn-glyph { color: inherit; }
+  .facet-btn-n { font-size: 10.5px; color: var(--color-muted); }
+  /* the popover: the group's options, on the panel surface, under its button */
+  .facet-pop {
+    position: absolute; left: 0; top: calc(100% + 4px); z-index: 30;
+    display: flex; flex-direction: column; gap: 2px; margin: 0;
+    min-width: 220px; max-width: 320px; max-height: 60vh; overflow-y: auto;
+    padding: 6px; box-shadow: var(--shadow-panel);
   }
   .facet-opt {
-    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
-    padding: 3px 10px 3px 8px; border: 1px solid var(--color-line); border-radius: 20px;
-    background: var(--color-ground); color: var(--color-ink); cursor: pointer;
+    display: flex; align-items: center; gap: 8px; max-width: 100%;
+    padding: 4px 8px; border-radius: 8px; color: var(--color-ink); cursor: pointer;
   }
-  .facet-opt:hover { border-color: var(--color-muted); }
-  .facet-opt.is-on { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
-  .facet-opt input { margin: 0; width: 12px; height: 12px; accent-color: var(--color-accent); }
-  .facet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facet-opt:hover { background: var(--color-raised); }
+  .facet-opt.is-on { background: var(--color-accent-soft); color: var(--color-accent); font-weight: 600; }
+  .facet-opt input { margin: 0; width: 12px; height: 12px; flex: none; accent-color: var(--color-accent); }
+  .facet-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .facet-n { color: var(--color-muted); font-size: 11px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
   /* SIDEWAYS ONLY. The page scrolls as one document (DataTable windows over the viewport), so
      this box never owns a vertical scrollport — a wide matrix scrolls under the cursor and
@@ -416,8 +433,7 @@
   .who { display: none; }
   .main { padding: 0 12px 48px; }
   .page { padding-top: 16px; }
-  .explorer, .detail { grid-template-columns: minmax(0, 1fr); }
-  .facets { padding-top: 0; }
+  .detail { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 719px) {
   .topbar { overflow-x: auto; }

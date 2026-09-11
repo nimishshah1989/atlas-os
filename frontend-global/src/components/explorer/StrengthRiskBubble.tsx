@@ -27,6 +27,15 @@
 // an unmeasured fund must not appear at the origin, which would read as "worst score, no risk"
 // (rule #0). The quadrant lines are the plotted cohort's own medians, so they move with the
 // filters and always split the funds actually on screen.
+//
+// THE AXIS DOES NOT BELONG TO THE WORST ROW. On 2026-09-10 the y-axis ran 0 → 30,000 percent
+// because one fund's stored volatility was about 300 (thirty thousand percent a year — a broken
+// price series, not a volatile fund), and every other fund on the board sat on one line at the
+// top. A scale set by its single most extreme value shows nothing about the other 1,654. So the
+// domain is cut at a high percentile of the plotted cohort — ONLY when the tail is pathological,
+// i.e. the maximum is far beyond that percentile — and the rows past it are PINNED at the edge
+// with their own marker and counted in the caption. They are not dropped, not clamped in the
+// data, and not drawn where they are not: a pinned disc says "off this scale", which is true.
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { instrumentPath, type InstrumentRow } from '@/lib/facts'
@@ -85,6 +94,33 @@ function ticks(max: number, count: number): number[] {
   return out
 }
 
+/** The p-th percentile of a list, linear interpolation between order statistics. */
+function percentile(values: number[], p: number): number {
+  const v = [...values].sort((a, b) => a - b)
+  if (v.length === 0) return Number.NaN
+  const pos = (v.length - 1) * p
+  const lo = Math.floor(pos)
+  const hi = Math.ceil(pos)
+  return v[lo] + (v[hi] - v[lo]) * (pos - lo)
+}
+
+/** DISPLAY conventions, not methodology: no score, weight or universe cut reads either number.
+ *  The cut sits at the 99th percentile so that on a board of ~1,700 funds at most a dozen or so
+ *  can ever be pinned; and it engages only when the maximum is more than TAIL_RATIO times that
+ *  percentile — a tail a reader would call broken, not merely long. A crypto fund at three times
+ *  the median volatility is a long tail and stays on the scale. */
+export const TAIL_PERCENTILE = 0.99
+export const TAIL_RATIO = 1.5
+
+/** The top of the y-axis for a set of volatilities, and which of them fall beyond it. */
+export function yDomain(values: number[]): { max: number; cut: number | null } {
+  if (values.length === 0) return { max: 0, cut: null }
+  const max = Math.max(...values)
+  if (values.length < 20) return { max, cut: null }
+  const p = percentile(values, TAIL_PERCENTILE)
+  return max > p * TAIL_RATIO && p > 0 ? { max: p, cut: p } : { max, cut: null }
+}
+
 export function StrengthRiskBubble({
   rows,
   assetClass,
@@ -97,10 +133,9 @@ export function StrengthRiskBubble({
   const router = useRouter()
   const [hover, setHover] = useState<Point | null>(null)
 
-  const { points, missing, maxVol, maxAdv } = useMemo(() => {
+  const { points, missing, maxAdv } = useMemo(() => {
     const pts: Point[] = []
     let skipped = 0
-    let vol = 0
     let adv = 0
     for (const r of rows) {
       const composite = num(r.composite)
@@ -109,7 +144,6 @@ export function StrengthRiskBubble({
         skipped += 1
         continue
       }
-      vol = Math.max(vol, v)
       const a = num(r.adv_usd) ?? 0
       adv = Math.max(adv, a)
       pts.push({
@@ -122,7 +156,7 @@ export function StrengthRiskBubble({
         peer: peerGroupLabel(peerGroupOf(r)),
       })
     }
-    return { points: pts, missing: skipped, maxVol: vol, maxAdv: adv }
+    return { points: pts, missing: skipped, maxAdv: adv }
   }, [rows])
 
   // A single fund would make its own median the only line on the chart, which says nothing.
@@ -138,10 +172,13 @@ export function StrengthRiskBubble({
     )
   }
 
-  const yMax = maxVol * 1.05
+  const domain = yDomain(points.map((p) => p.y))
+  const yMax = domain.max * 1.05
+  const pinned = domain.cut == null ? 0 : points.filter((p) => p.y > domain.cut!).length
   const sx = (v: number) => PAD.left + (v / 100) * PLOT.w
-  // INVERTED: low volatility at the top, so up-and-right is unambiguously the good corner.
-  const sy = (v: number) => PAD.top + (v / yMax) * PLOT.h
+  // INVERTED: low volatility at the top, so up-and-right is unambiguously the good corner. A
+  // reading past the cut sits ON the bottom edge — pinned, never plotted beyond the panel.
+  const sy = (v: number) => PAD.top + (Math.min(v, yMax) / yMax) * PLOT.h
 
   const xTicks = [0, 20, 40, 60, 80, 100]
   const yTicks = ticks(yMax, 5)
@@ -187,22 +224,29 @@ export function StrengthRiskBubble({
             .sort((a, b) => b.r - a.r)
             .map((p) => {
               const colour = decileColour(p.decile) ?? 'var(--color-ink-2)'
+              const off = domain.cut != null && p.y > domain.cut
+              const dim = hover && hover.symbol !== p.symbol
               return (
                 <circle
                   key={p.symbol}
                   cx={sx(p.x)}
                   cy={sy(p.y)}
                   r={radius(p.r, maxAdv)}
-                  fill={colour}
-                  fillOpacity={hover && hover.symbol !== p.symbol ? 0.18 : 0.62}
+                  // Off the scale: a hollow, dashed disc on the edge — visibly a different kind
+                  // of mark from a plotted fund, so nobody reads it as "very volatile, exactly here".
+                  fill={off ? 'none' : colour}
+                  fillOpacity={dim ? 0.18 : 0.62}
                   stroke={colour}
-                  strokeOpacity={0.9}
+                  strokeOpacity={dim ? 0.35 : 0.9}
+                  strokeDasharray={off ? '3 2' : undefined}
+                  strokeWidth={off ? 1.5 : 1}
+                  data-pinned={off ? '' : undefined}
                   style={{ cursor: 'pointer' }}
                   onMouseEnter={() => setHover(p)}
                   onMouseLeave={() => setHover(null)}
                   onClick={() => router.push(instrumentPath(assetClass, p.symbol))}
                 >
-                  <title>{`${p.symbol} — composite ${p.x.toFixed(1)}, volatility ${formatPct(String(p.y), 1)}`}</title>
+                  <title>{`${p.symbol} — composite ${p.x.toFixed(1)}, volatility ${formatPct(String(p.y), 1)}${off ? ' (off the scale, pinned at the edge)' : ''}`}</title>
                 </circle>
               )
             })}
@@ -222,10 +266,12 @@ export function StrengthRiskBubble({
           </text>
         ))}
         <text x={PAD.left + PLOT.w / 2} y={H - 6} textAnchor="middle" fontSize="12" fill="var(--color-ink-2)">
-          Composite score
+          <title>The blended score, 0–100: Σ(weight × lens) ÷ Σ weight over the lenses present.</title>
+          Composite score →
         </text>
         <text x={14} y={PAD.top + PLOT.h / 2} textAnchor="middle" fontSize="12" fill="var(--color-ink-2)" transform={`rotate(-90 14 ${PAD.top + PLOT.h / 2})`}>
-          Volatility, percent a year
+          <title>Annualised volatility: stdev of daily returns over 252 sessions × √252. Calm is at the top.</title>
+          ← Volatility, percent a year
         </text>
       </svg>
 
@@ -239,11 +285,17 @@ export function StrengthRiskBubble({
               <span className="num">{formatUsd(String(hover.r), 0)}</span> a day · {hover.peer}
             </>
           ) : (
-            <>Disc size is traded value a day; colour is the decile in the peer group. Click one to open it.</>
+            <>Right is a stronger score, up is a calmer fund. Disc size is traded value a day; colour is the decile in the peer group. Hover for the numbers, click to open.</>
           )}
         </span>
         <span className="num">
-          {points.length.toLocaleString()} plotted{missing > 0 && ` · ${missing.toLocaleString()} not scored or not priced`}
+          {points.length.toLocaleString()} plotted
+          {pinned > 0 && domain.cut != null && (
+            <span title={`The scale stops at ${formatPct(String(domain.cut), 0)} a year; ${pinned} reading(s) beyond it are drawn on the edge as hollow discs rather than stretching the axis to one fund.`}>
+              {` · ${pinned.toLocaleString()} off the scale (above ${formatPct(String(domain.cut), 0)}), pinned at the edge`}
+            </span>
+          )}
+          {missing > 0 && ` · ${missing.toLocaleString()} not scored or not priced`}
         </span>
       </div>
     </div>
